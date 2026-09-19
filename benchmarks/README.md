@@ -1,8 +1,8 @@
 # Benchmarks
 
-`data/semif-authored144.jsonl` is a SemIf-derived benchmark. It follows SemIf's task design, record structure, and evaluation approach. The 144 concrete situations, options, and rationales were authored for this benchmark; they are not copied SemIf examples.
+`data/semif-authored144.jsonl` is an exact copy of SemIf's official [`benchmarks/data/authored144.jsonl`](https://github.com/TheoLeeCJ/SemIf/blob/b9cb32537e78be65f19abfcb1de8fc504b627d84/benchmarks/data/authored144.jsonl) at commit `b9cb32537e78be65f19abfcb1de8fc504b627d84`. Only the local filename differs.
 
-The dataset is distributed under the SemIf MIT license reproduced in `data/SEMIF-LICENSE.txt`.
+The 144 examples were authored by the SemIf project. The dataset is distributed under SemIf's MIT license, reproduced in `data/SEMIF-LICENSE.txt`.
 
 Build the package before running a benchmark:
 

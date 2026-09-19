@@ -63,7 +63,7 @@ The library has no telemetry.
 
 ## Benchmark
 
-The local adapter was compared with `typesafe/jev-1.13` on 144 authored SemIf-style decision cases covering evidence interpretation, rule application, and candidate selection. The local model was **Qwen 3.8 27B Q4_XL** served by llama.cpp on an **NVIDIA RTX 4090**. The Qwen run used the default A/B/C mode. The model was already loaded, and requests were sent one at a time to a llama.cpp server on the same machine.
+The local adapter was compared with `typesafe/jev-1.13` on SemIf's official 144-row `authored144` benchmark, which covers evidence interpretation, rule application, and candidate selection. The local model was **Qwen 3.8 27B Q4_XL** served by llama.cpp on an **NVIDIA RTX 4090**. The Qwen run used the default A/B/C mode. The model was already loaded, and requests were sent one at a time to a llama.cpp server on the same machine.
 
 | Metric | Qwen 3.8 27B Q4_XL + choosekit | Jev 1.13 |
 |---|---:|---:|
@@ -73,7 +73,7 @@ The local adapter was compared with `typesafe/jev-1.13` on 144 authored SemIf-st
 | 95th percentile latency (p95) | 286 ms | 546 ms |
 | Throughput | 4.02 decisions/s | 2.43 decisions/s |
 
-These results are specific to this 144-case benchmark, and performance can differ on other decision workloads. Latency is end-to-end. The Qwen server ran on the same machine. Jev was accessed through a hosted API. The timings therefore include different transport overhead. The [dataset and reproduction commands](benchmarks/README.md) are under `benchmarks/`; the included SemIf-derived data retains its upstream MIT license in `benchmarks/data/SEMIF-LICENSE.txt`.
+These results are specific to this 144-case benchmark, and performance can differ on other decision workloads. Latency is end-to-end. The Qwen server ran on the same machine. Jev was accessed through a hosted API. The timings therefore include different transport overhead. The repository includes an exact copy of SemIf's [`authored144.jsonl`](https://github.com/TheoLeeCJ/SemIf/blob/b9cb32537e78be65f19abfcb1de8fc504b627d84/benchmarks/data/authored144.jsonl), its MIT license, and the [reproduction commands](benchmarks/README.md).
 
 ### Probability examples
 
