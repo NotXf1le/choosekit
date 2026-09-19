@@ -67,9 +67,12 @@ test("maps label scores back to choice keys and reuses sibling logprobs", async 
   assert.equal(completions(f)[0].body.model, "local-model");
 });
 
-test("falls back to one forced probe when a sibling is absent from top logprobs", async () => {
+test("scores candidates separately when top logprobs contain none of them", async () => {
   const scores = new Map([[encode("A")[0], -0.3], [encode("B")[0], -1.4]]);
-  const f = fixture({ logprob: (id) => scores.get(id) ?? -10 });
+  const f = fixture({
+    logprob: (id) => scores.get(id) ?? -10,
+    topTokenIds: () => [999],
+  });
 
   const decision = await fromLlamaCpp({ baseURL: "http://localhost:8080", fetch: f.fetch })(choiceRequest);
 
@@ -169,4 +172,23 @@ test("rejects a probability attached to a different token", async () => {
 
   await assert.rejects(choose(choiceRequest),
     (error) => error instanceof ScoringError && /different token/.test(error.message));
+});
+
+test("rejects conflicting logprobs for the forced token", async () => {
+  const f = fixture({ transform: (value) => {
+    const forced = value.completion_probabilities[0];
+    return {
+      ...value,
+      completion_probabilities: [{
+        ...forced,
+        top_logprobs: forced.top_logprobs.map((entry) => entry.id === forced.id
+          ? { ...entry, logprob: entry.logprob - 0.5 }
+          : entry),
+      }],
+    };
+  } });
+  const choose = fromLlamaCpp({ baseURL: "http://localhost:8080", fetch: f.fetch });
+
+  await assert.rejects(choose(choiceRequest),
+    (error) => error instanceof ScoringError && /conflicting logprobs/.test(error.message));
 });

@@ -132,6 +132,10 @@ function parseProbe(value: unknown, prompt: readonly number[], targetTokenId: nu
     }
     topLogprobs.set(entry.id, entry.logprob);
   }
+  const repeatedLogprob = topLogprobs.get(targetTokenId);
+  if (repeatedLogprob !== undefined && repeatedLogprob !== logprob) {
+    throw new ScoringError("llama.cpp returned conflicting logprobs for the forced token.");
+  }
 
   const settings = value.generation_settings;
   if (isRecord(settings)
@@ -269,7 +273,9 @@ export function fromLlamaCpp(options: LlamaCppOptions): Chooser {
           throw new ScoringError("A candidate branch is missing its raw log probability.");
         }
         const value = branch.score + logprob;
-        if (!Number.isFinite(value)) throw new ScoringError("Sequence log-likelihood overflowed.");
+        if (!Number.isFinite(value)) {
+          throw new ScoringError("Candidate log-probability score overflowed.");
+        }
         const indices = groups.get(targetTokenId)!;
         if (indices.length === 1) {
           scores[indices[0]!] = value;

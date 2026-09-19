@@ -112,7 +112,9 @@ export function createFormattedChooser(score: Scorer, options: ChooserOptions,
     const keys = entries.map(([key]) => key) as ChoiceKey<C>[];
     const prepared = instruction(question, entries, candidateFormat);
     const prompt = formatPrompt
-      ? await formatPrompt(Object.freeze({ context, instruction: prepared.content }))
+      ? await formatPrompt(Object.freeze({
+        context, instruction: prepared.content, ...(signal ? { signal } : {}),
+      }))
       : `${context}\n\n${prepared.content}\n\nAnswer: `;
     requireText(prompt, "Formatted prompt");
     if (!prompt.startsWith(context)) {
