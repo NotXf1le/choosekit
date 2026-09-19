@@ -57,7 +57,7 @@ The library has no telemetry.
 | `labels` | `A`, `B`, `C`, ... | Default. The choice set has at most 26 entries. |
 | `minimal-prefix` | Original JSON-quoted keys | The key names should influence the decision, or the set has more than 26 entries. |
 
-`labels` shows each description under a short label and maps the selected label back to the caller's key after selection. It usually needs one distinguishing token per option.
+In `labels` mode, choices are shown to the model as `A`, `B`, `C` instead of their original keys. For example, `refund: "Issue the refund"` is shown as `"A": "Issue the refund"`. Each description must therefore make the option clear. `choosekit` maps the selected label back to the original key.
 
 `minimal-prefix` walks the token tree until every key is distinguishable. For keys such as `watermelon` and `watermelon juice`, the shared token path is handled once and scoring stops when the paths separate.
 
@@ -119,9 +119,9 @@ Most distributions are similar. Some differ substantially: the systems select di
 
 ## Prompt formatting
 
-`context` is the exact serialized prefix against which the decision is scored. The default formatter preserves that prefix, then appends the question, choice descriptions, and an answer marker. Conversation history remains entirely in the caller-provided context.
+`context` is copied unchanged to the start of the scoring prompt. The default formatter then appends the question, choice descriptions, and an answer marker.
 
-For chat models, pass the model's normal serialized chat prefix and use `formatPrompt` when the decision turn needs a particular template. Use the template required by your model; this example uses Qwen's chat markers:
+For chat models, `context` should be the model's normal serialized chat prefix. Use `formatPrompt` when the decision turn needs a particular template. This example uses Qwen's chat markers:
 
 ```ts
 const choose = fromLlamaCpp({
@@ -136,7 +136,7 @@ The formatted prompt must start with `context` unchanged so an existing server-s
 
 ## Custom scorer
 
-Use `createChooser` with any backend that can return one conditional log-likelihood per candidate:
+Use `createChooser` with any backend that can return one comparable conditional log-probability score per candidate:
 
 ```ts
 import { createChooser, type Scorer } from "choosekit";
@@ -158,7 +158,7 @@ Scores use natural logarithms and must be at most zero.
 {
   choice,          // selected caller key
   distribution,    // normalized probability for every supplied key
-  scores,          // backend log-likelihood score for every key
+  scores,          // backend log-probability score for every key
   margin,          // largest probability minus the second largest
   entropy,         // Shannon entropy in nats
   boundaryTokens,  // prompt tokens rolled back at a tokenization boundary

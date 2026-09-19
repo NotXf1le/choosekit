@@ -34,7 +34,10 @@ void local({ context: "", question: "?", choices: { yes: "Yes", no: "No" } });
 // @ts-expect-error The old implicit agent-state input is not part of this API.
 choose({ state: "Changed", question: "Next?", choices: { yes: "Yes", no: "No" } });
 const formatter = createChooser(scorer, {
-  formatPrompt: ({ context, instruction }) => `${context}\n${instruction}\nAnswer: `,
+  formatPrompt: ({ context, instruction, signal }) => {
+    signal?.throwIfAborted();
+    return `${context}\n${instruction}\nAnswer: `;
+  },
 });
 void formatter;
 const cached: number | null | undefined = decision.usage?.cachedTokens;

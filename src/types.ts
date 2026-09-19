@@ -2,7 +2,7 @@ export type Choices = Readonly<Record<string, string>>;
 export type ChoiceKey<C extends Choices> = `${Extract<keyof C, string | number>}`;
 
 export interface ChoiceRequest<C extends Choices> {
-  /** The existing, serialized context. Kept as the beginning of the scoring prompt. */
+  /** Existing context, copied unchanged to the beginning of the scoring prompt. */
   readonly context: string;
   readonly question: string;
   readonly choices: C;
@@ -39,7 +39,7 @@ export interface ScoreRequest {
 }
 
 export interface Scores {
-  /** Full conditional sequence log-likelihoods, in candidate order, using natural logs. */
+  /** Comparable conditional log-probability scores, in candidate order, using natural logs. */
   readonly logprobs: readonly number[];
   readonly boundaryTokens?: number;
   readonly usage?: Usage;
@@ -52,6 +52,7 @@ export type Chooser = <const C extends Choices>(request: ChoiceRequest<C>) =>
 export interface PromptInput {
   readonly context: string;
   readonly instruction: string;
+  readonly signal?: AbortSignal;
 }
 
 export interface ChooserOptions {

@@ -179,7 +179,11 @@ test("checks cancellation after formatting and before scoring", async () => {
   const controller = new AbortController();
   let called = false;
   const choose = createChooser(() => { called = true; }, {
-    formatPrompt: ({ context, instruction }) => { controller.abort(); return context + instruction; },
+    formatPrompt: ({ context, instruction, signal }) => {
+      assert.equal(signal, controller.signal);
+      controller.abort();
+      return context + instruction;
+    },
   });
   await assert.rejects(choose({ ...request, signal: controller.signal }), { name: "AbortError" });
   assert.equal(called, false);
