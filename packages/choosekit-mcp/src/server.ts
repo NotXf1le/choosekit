@@ -1,5 +1,6 @@
 import { McpServer } from "@modelcontextprotocol/server";
 import { ScoringError, type Chooser, type Decision, type Usage } from "choosekit";
+import { createRequire } from "node:module";
 import { z } from "zod";
 
 export type ChoiceMode = "labels" | "minimal-prefix";
@@ -7,6 +8,8 @@ export type ChoiceMode = "labels" | "minimal-prefix";
 export interface ServerOptions {
   readonly mode?: ChoiceMode;
 }
+
+const packageVersion = (createRequire(import.meta.url)("../package.json") as { version: string }).version;
 
 const usageSchema = z.object({
   promptTokens: z.number().int().nonnegative(),
@@ -78,7 +81,7 @@ export function buildServer(chooser: Chooser, options: ServerOptions = {}): McpS
     throw new TypeError("mode must be labels or minimal-prefix.");
   }
 
-  const server = new McpServer({ name: "choosekit-mcp", version: "0.1.0" });
+  const server = new McpServer({ name: "choosekit-mcp", version: packageVersion });
   server.registerTool(
     "choose",
     {

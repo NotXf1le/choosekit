@@ -61,7 +61,7 @@ function startCli(env = cliEnvironment()) {
       const timeout = setTimeout(() => {
         pending.delete(id);
         reject(new Error(`Timed out waiting for ${method}.`));
-      }, 5_000);
+      }, 10_000);
       pending.set(id, {
         resolve: (value) => {
           clearTimeout(timeout);

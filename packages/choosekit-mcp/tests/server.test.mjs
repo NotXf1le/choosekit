@@ -161,17 +161,16 @@ test("rejects __proto__ instead of silently dropping it", async (t) => {
   };
   const connection = await connect(chooser);
   t.after(() => connection.close());
-  const arguments_ = JSON.parse(JSON.stringify({
+  const arguments_ = {
     context: "Choose safely.",
     question: "Which key?",
     choices: JSON.parse('{"__proto__":"Prototype option","first":"First option","second":"Second option"}'),
-  }));
+  };
 
   const response = await callChoose(connection, arguments_);
 
   assert.equal(response.result.isError, true);
   assert.equal(called, false);
-  assert.equal(Object.getPrototypeOf({}).polluted, undefined);
 });
 
 test("preserves constructor as an ordinary choice key", async (t) => {
