@@ -1,0 +1,56 @@
+{
+  "name": "choosekit-mcp",
+  "version": "0.1.0",
+  "description": "Use choosekit as a local MCP server.",
+  "license": "Apache-2.0",
+  "author": {
+    "name": "NotXf1le",
+    "url": "https://github.com/NotXf1le"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/NotXf1le/choosekit.git",
+    "directory": "packages/choosekit-mcp"
+  },
+  "homepage": "https://github.com/NotXf1le/choosekit/tree/master/packages/choosekit-mcp#readme",
+  "bugs": {
+    "url": "https://github.com/NotXf1le/choosekit/issues"
+  },
+  "type": "module",
+  "bin": {
+    "choosekit-mcp": "./dist/cli.js"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "npm run build && node --test tests/*.test.mjs",
+    "check": "npm run typecheck && npm test",
+    "prepack": "npm run build"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/server": "2.0.0",
+    "choosekit": "^0.4.2",
+    "zod": "^4.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "typescript": "5.8.3"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "keywords": [
+    "mcp",
+    "llm",
+    "llama.cpp",
+    "choosekit"
+  ]
+}
