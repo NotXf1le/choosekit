@@ -1,0 +1,6 @@
+# TODO
+
+## Deferred
+
+- Tokenize the prompt and prompt-plus-candidate inputs with bounded parallelism in the `llama.cpp` adapter instead of awaiting every `/tokenize` request sequentially. Preserve input order and exact boundary-aware tokenization; make concurrency configurable and measure transport overhead separately from server processing. Consider a future native batch-tokenization endpoint returning one token array per input, because stock `/tokenize` does not provide that response shape.
+- Add native `llama.cpp` support for requesting raw log probabilities for multiple arbitrary token IDs in one request (`logprob_token_ids`). Prefer zero-token generation (`n_predict: 0`) and calculate every requested token's log probability from the full-vocabulary softmax. Keep the current top-N plus exact forced-token fallback path for servers without the extension; an explicitly selected bulk mode must fail clearly when unsupported instead of silently changing protocols.

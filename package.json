@@ -1,0 +1,74 @@
+{
+  "name": "choosekit",
+  "version": "0.4.0",
+  "description": "Typed choices from your existing language model scorer.",
+  "license": "Apache-2.0",
+  "author": {
+    "name": "NotXf1le",
+    "url": "https://github.com/NotXf1le"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/NotXf1le/choosekit.git"
+  },
+  "homepage": "https://github.com/NotXf1le/choosekit#readme",
+  "bugs": {
+    "url": "https://github.com/NotXf1le/choosekit/issues"
+  },
+  "type": "module",
+  "main": "./dist/cjs/index.js",
+  "module": "./dist/esm/index.js",
+  "types": "./dist/esm/index.d.ts",
+  "exports": {
+    ".": {
+      "import": {
+        "types": "./dist/esm/index.d.ts",
+        "default": "./dist/esm/index.js"
+      },
+      "require": {
+        "types": "./dist/cjs/index.d.ts",
+        "default": "./dist/cjs/index.js"
+      }
+    },
+    "./llama-cpp": {
+      "import": {
+        "types": "./dist/esm/llama-cpp.d.ts",
+        "default": "./dist/esm/llama-cpp.js"
+      },
+      "require": {
+        "types": "./dist/cjs/llama-cpp.d.ts",
+        "default": "./dist/cjs/llama-cpp.js"
+      }
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE",
+    "CHANGELOG.md"
+  ],
+  "sideEffects": false,
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "typecheck": "npm run build && tsc -p tests/types/tsconfig.json",
+    "test": "npm run build && node --test tests/*.test.mjs",
+    "coverage": "npm run build && node --test --experimental-test-coverage --test-coverage-include=dist/esm/*.js tests/*.test.mjs",
+    "check": "npm run typecheck && node --test tests/*.test.mjs",
+    "prepack": "npm run build"
+  },
+  "devDependencies": {
+    "typescript": "5.8.3"
+  },
+  "keywords": [
+    "llm",
+    "agents",
+    "choices",
+    "logprobs",
+    "llama.cpp",
+    "typescript"
+  ]
+}
