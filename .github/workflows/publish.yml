@@ -22,5 +22,6 @@ jobs:
       - run: npm ci
       - run: npm run check
       - name: Verify release tag
-        run: node --input-type=module -e "import p from './package.json' with { type: 'json' }; if (process.env.GITHUB_REF_NAME !== 'v' + p.version) { throw new Error('Tag must match package version'); }"
+        run: |
+          node --input-type=module -e "import p from './package.json' with { type: 'json' }; if (process.env.GITHUB_REF_NAME !== 'v' + p.version) { throw new Error('Tag must match package version'); }"
       - run: npm publish --access public
