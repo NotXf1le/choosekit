@@ -16,7 +16,7 @@ Agents often need to choose from known options:
 - classify evidence;
 - choose one legal move.
 
-`choosekit` uses the model's next-token probability mass to score declared alternatives directly, eliminating extra decoding and validation.
+`choosekit` scores choices using the model's conditional log probabilities at the token branches that distinguish them.
 
 The project was inspired by [Jev and the System One model interface](https://typesafe.ai/blog/introducing-system-one-models-and-jev): application state in, typed probabilistic decisions out. Jev is a specialized hosted model. `choosekit` explores the same useful interface with a model you control. Application state stays on infrastructure you choose, and the decision path can use a model already running inside an existing deployment.
 

@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { dirname } from "node:path";
 import { performance } from "node:perf_hooks";
 import { fromLlamaCpp } from "../dist/esm/llama-cpp.js";
 
@@ -109,6 +110,7 @@ const source = readFileSync(input);
 const allRows = source.toString("utf8").trim().split(/\r?\n/).map((line) => JSON.parse(line));
 if (allRows.length !== 144) throw new Error(`Expected 144 SemIf rows, received ${allRows.length}.`);
 const rows = limit === undefined ? allRows : allRows.slice(0, limit);
+mkdirSync(dirname(output), { recursive: true });
 const choose = fromLlamaCpp({ baseURL, model, mode });
 const results = [];
 const startedAt = performance.now();
