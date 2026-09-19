@@ -30,7 +30,9 @@ function validateReport(report, name, probabilityField) {
     if (rowsById.has(row.id)) {
       throw new Error(`${name} report contains duplicate case ID: ${row.id}.`);
     }
-    if (row.error) throw new Error(`${name} row ${row.id} failed: ${row.error}`);
+    if (Object.hasOwn(row, "error")) {
+      throw new Error(`${name} row ${row.id} failed: ${row.error}`);
+    }
     if (!Array.isArray(row.optionIds) || row.optionIds.length === 0
       || row.optionIds.some((id) => typeof id !== "string" || id.length === 0)
       || new Set(row.optionIds).size !== row.optionIds.length) {
@@ -38,6 +40,9 @@ function validateReport(report, name, probabilityField) {
     }
     if (typeof row.gold !== "string" || !row.optionIds.includes(row.gold)) {
       throw new Error(`${name} row ${row.id} has a gold label outside its options.`);
+    }
+    if (typeof row.predicted !== "string" || !row.optionIds.includes(row.predicted)) {
+      throw new Error(`${name} row ${row.id} has a predicted label outside its options.`);
     }
 
     const probabilities = row[probabilityField];
@@ -62,6 +67,10 @@ function validateReport(report, name, probabilityField) {
     if (Math.abs(total - 1) > 1e-6) {
       throw new Error(`${name} row ${row.id} probabilities sum to ${total}, not 1.`);
     }
+    const maximum = Math.max(...row.optionIds.map((id) => probabilities[id]));
+    if (probabilities[row.predicted] !== maximum) {
+      throw new Error(`${name} row ${row.id} predicted label is not a top choice.`);
+    }
 
     rowsById.set(row.id, row);
   }
@@ -73,7 +82,6 @@ const qwen = load(option("--qwen"), "qwen");
 const jev = load(option("--jev"), "jev");
 const output = option("--output");
 if (output && existsSync(output)) throw new Error(`Refusing to overwrite existing output: ${output}`);
-if (output) mkdirSync(dirname(output), { recursive: true });
 
 const qwenById = validateReport(qwen, "Qwen", "distribution");
 const jevById = validateReport(jev, "Jev", "probabilities");
@@ -135,5 +143,8 @@ const comparison = {
 };
 
 const serialized = `${JSON.stringify(comparison, null, 2)}\n`;
-if (output) writeFileSync(output, serialized);
+if (output) {
+  mkdirSync(dirname(output), { recursive: true });
+  writeFileSync(output, serialized);
+}
 console.log(serialized.trimEnd());

@@ -4,9 +4,9 @@ import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
 import { after, test } from "node:test";
-import { pathToFileURL } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
-const root = resolve(import.meta.dirname, "..");
+const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const input = join(root, "benchmarks", "data", "semif-authored144.jsonl");
 const preload = pathToFileURL(join(root, "tests", "fixtures", "benchmark-fetch.mjs")).href;
 const temporaryDirectories = [];
@@ -56,7 +56,8 @@ test("llama.cpp benchmark creates its output directory before inference", () => 
   assert.equal(result.status, 0, result.stderr);
   const report = JSON.parse(readFileSync(output, "utf8"));
   assert.equal(report.results.length, 1);
-  assert.equal(report.summary.errors, 0);
+  assert.equal(report.summary.errors, 1);
+  assert.match(report.results[0].error, /Intentional benchmark test failure/);
 });
 
 test("OpenRouter benchmark creates its output directory before inference", () => {
@@ -71,10 +72,11 @@ test("OpenRouter benchmark creates its output directory before inference", () =>
   assert.equal(result.status, 0, result.stderr);
   const report = JSON.parse(readFileSync(output, "utf8"));
   assert.equal(report.results.length, 1);
-  assert.equal(report.summary.errors, 0);
+  assert.equal(report.summary.errors, 1);
+  assert.match(report.results[0].error, /Intentional benchmark test failure/);
 });
 
-test("comparator creates a nested output and preserves its public result shape", () => {
+test("comparator creates a nested output for valid reports", () => {
   const qwen = temporaryPath("qwen.json");
   const jev = temporaryPath("jev.json");
   const output = temporaryPath("comparison.json");
@@ -91,19 +93,21 @@ test("comparator creates a nested output and preserves its public result shape",
 });
 
 const invalidComparisons = [
-  ["duplicate Qwen IDs", [...qwenRows, qwenRows[0]], jevRows],
-  ["duplicate Jev IDs", qwenRows, [...jevRows, jevRows[0]]],
-  ["different case sets", qwenRows, [jevRows[0], { ...jevRows[1], id: "other" }]],
-  ["different option order", qwenRows, [jevRows[0], { ...jevRows[1], optionIds: ["b", "a"] }]],
-  ["different gold labels", qwenRows, [jevRows[0], { ...jevRows[1], gold: "a" }]],
-  ["missing probability keys", qwenRows, [jevRows[0], { ...jevRows[1], probabilities: { a: 1 } }]],
-  ["extra probability keys", qwenRows, [jevRows[0], { ...jevRows[1], probabilities: { a: 0.3, b: 0.6, c: 0.1 } }]],
-  ["negative probabilities", [{ ...qwenRows[0], distribution: { a: 1.1, b: -0.1 } }, qwenRows[1]], jevRows],
-  ["probabilities above one", qwenRows, [jevRows[0], { ...jevRows[1], probabilities: { a: -0.1, b: 1.1 } }]],
-  ["unnormalized probabilities", [{ ...qwenRows[0], distribution: { a: 0.5, b: 0.2 } }, qwenRows[1]], jevRows],
+  ["duplicate Qwen IDs", [...qwenRows, qwenRows[0]], jevRows, /duplicate case ID/],
+  ["duplicate Jev IDs", qwenRows, [...jevRows, jevRows[0]], /duplicate case ID/],
+  ["different case sets", qwenRows, [jevRows[0], { ...jevRows[1], id: "other" }], /different case sets/],
+  ["different option order", qwenRows, [jevRows[0], { ...jevRows[1], optionIds: ["b", "a"] }], /different option IDs/],
+  ["different gold labels", qwenRows, [jevRows[0], { ...jevRows[1], gold: "a" }], /different gold labels/],
+  ["mismatched probability keys", qwenRows, [jevRows[0], { ...jevRows[1], probabilities: { a: 0.9, c: 0.1 } }], /probability keys do not match/],
+  ["negative probabilities", [{ ...qwenRows[0], distribution: { a: -0.1, b: 1 } }, qwenRows[1]], jevRows, /invalid probability for a/],
+  ["probabilities above one", qwenRows, [jevRows[0], { ...jevRows[1], probabilities: { a: 0, b: 1.1 } }], /invalid probability for b/],
+  ["unnormalized probabilities", [{ ...qwenRows[0], distribution: { a: 0.5, b: 0.2 } }, qwenRows[1]], jevRows, /probabilities sum to/],
+  ["predicted labels outside the options", qwenRows, [jevRows[0], { ...jevRows[1], predicted: "c" }], /predicted label outside its options/],
+  ["predicted labels below the maximum", qwenRows, [jevRows[0], { ...jevRows[1], predicted: "a" }], /predicted label is not a top choice/],
+  ["rows with an empty error", [{ ...qwenRows[0], error: "" }, qwenRows[1]], jevRows, /row one failed:/],
 ];
 
-for (const [name, qwenRowsValue, jevRowsValue] of invalidComparisons) {
+for (const [name, qwenRowsValue, jevRowsValue, expectedError] of invalidComparisons) {
   test(`comparator rejects ${name}`, () => {
     const qwen = temporaryPath("qwen.json");
     const jev = temporaryPath("jev.json");
@@ -114,7 +118,7 @@ for (const [name, qwenRowsValue, jevRowsValue] of invalidComparisons) {
     const result = run("compare-semif.mjs", ["--qwen", qwen, "--jev", jev, "--output", output]);
 
     assert.notEqual(result.status, 0);
-    assert.match(result.stderr, /(?:Error|TypeError)/);
+    assert.match(result.stderr, expectedError);
     assert.throws(() => readFileSync(output));
   });
 }
