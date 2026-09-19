@@ -73,6 +73,8 @@ The local adapter was compared with `typesafe/jev-1.13` on SemIf's official 144-
 | 95th percentile latency (p95) | 286 ms | 546 ms |
 | Throughput | 4.02 decisions/s | 2.43 decisions/s |
 
+Both systems got 139 of 144 cases right, but not the same 139. They share only 2 of their 5 mistakes; each makes 3 mistakes the other avoids. On the 2 shared failures, they selected different incorrect options.
+
 These results are specific to this 144-case benchmark, and performance can differ on other decision workloads. Latency is end-to-end. The Qwen server ran on the same machine. Jev was accessed through a hosted API. The timings therefore include different transport overhead. The repository includes an exact copy of SemIf's [`authored144.jsonl`](https://github.com/TheoLeeCJ/SemIf/blob/b9cb32537e78be65f19abfcb1de8fc504b627d84/benchmarks/data/authored144.jsonl), its MIT license, and the [reproduction commands](benchmarks/README.md).
 
 ### Probability examples
