@@ -89,6 +89,48 @@ function summarize(results, startedAt) {
   };
 }
 
+/** llama.cpp serves /v1/models beside /completion; mirror the adapter's base-URL handling. */
+function modelsURL(baseURL) {
+  const url = new URL(baseURL);
+  const path = url.pathname.replace(/\/v1\/?$/, "").replace(/\/$/, "");
+  url.pathname = `${path}/v1/models`;
+  return url.href;
+}
+
+async function servedModelIds(url) {
+  const response = await fetch(url, { signal: AbortSignal.timeout(30_000) });
+  if (!response.ok) throw new Error(`HTTP ${response.status} ${response.statusText}`);
+  const body = await response.json();
+  const entries = Array.isArray(body?.data) ? body.data : [];
+  const ids = entries.map((entry) => entry?.id).filter((id) => typeof id === "string" && id.length > 0);
+  if (ids.length === 0) throw new Error("the response listed no models");
+  return ids;
+}
+
+/**
+ * llama.cpp answers with whatever is loaded however the request names the
+ * model, so an unchecked --model puts a name in the results that may never
+ * have run. Confirm it against the server before spending an hour on rows.
+ */
+async function checkModel(baseURL, model) {
+  const url = modelsURL(baseURL);
+  let ids;
+  try {
+    ids = await servedModelIds(url);
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : String(error);
+    throw new Error(`Could not list the models at ${url}: ${detail}.`
+      + " Start the server first, or pass --skip-model-check to record the run as unverified.");
+  }
+  if (!ids.includes(model)) {
+    throw new Error(`The server at ${url} serves ${ids.map((id) => `"${id}"`).join(", ")},`
+      + ` not "${model}". llama.cpp answers with whatever is loaded however the request names the`
+      + " model, so these results would carry a model name that never ran."
+      + " Pass --model with one of the ids above, or --skip-model-check to record the run as unverified.");
+  }
+  return model;
+}
+
 const input = option("--input", "benchmarks/data/semif-authored144.jsonl");
 const mode = option("--mode", "labels");
 if (mode !== "labels" && mode !== "minimal-prefix") {
@@ -98,6 +140,7 @@ const output = option("--output", `benchmarks/results/semif-qwen3.8-27b-producti
 const baseURL = option("--base-url", process.env.LLAMA_CPP_BASE_URL
   ?? "http://127.0.0.1:11434/");
 const model = option("--model", process.env.LLAMA_CPP_MODEL ?? "qwen3.8-27b-text-64k");
+const skipModelCheck = process.argv.includes("--skip-model-check");
 const rawLimit = option("--limit", undefined);
 const limit = rawLimit === undefined ? undefined : Number.parseInt(rawLimit, 10);
 
@@ -111,6 +154,9 @@ const allRows = source.toString("utf8").trim().split(/\r?\n/).map((line) => JSON
 if (allRows.length !== 144) throw new Error(`Expected 144 SemIf rows, received ${allRows.length}.`);
 const rows = limit === undefined ? allRows : allRows.slice(0, limit);
 mkdirSync(dirname(output), { recursive: true });
+const resolvedModel = skipModelCheck ? null : await checkModel(baseURL, model);
+if (skipModelCheck) console.warn("--skip-model-check: the recorded model is the one requested, unconfirmed.");
+else console.log(`Model confirmed by the server: ${resolvedModel}`);
 const choose = fromLlamaCpp({ baseURL, model, mode });
 const results = [];
 const startedAt = performance.now();
@@ -172,7 +218,15 @@ for (let index = 0; index < rows.length; index++) {
       totalRows: allRows.length,
       selectedRows: rows.length,
     },
-    runtime: { baseURL, model, mode, adapter: "choosekit/llama-cpp", packageVersion: "0.5.0" },
+    runtime: {
+      baseURL,
+      model,
+      resolvedModel,
+      modelChecked: !skipModelCheck,
+      mode,
+      adapter: "choosekit/llama-cpp",
+      packageVersion: "0.5.0",
+    },
     interpretation: mode === "labels"
       ? "Package A/B/C label prompt and distinguishing-token likelihoods."
       : "Package original-key prompt and minimal distinguishing-prefix likelihoods.",

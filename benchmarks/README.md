@@ -21,6 +21,12 @@ node benchmarks/run-semif.mjs \
   --output benchmarks/results/semif-qwen-labels.json
 ```
 
+Before the first row, the script asks the server which models it serves (`GET /v1/models`) and stops
+unless `--model` is one of them. llama.cpp answers with whatever is loaded however the request names
+the model, so without that check a run labelled `qwen3.8-27b-text-64k` may have been answered by
+something else entirely. `--skip-model-check` runs anyway and records `modelChecked: false` with a
+null `resolvedModel` in the report's `runtime` block.
+
 Run the Jev comparison with an OpenRouter API key:
 
 ```sh

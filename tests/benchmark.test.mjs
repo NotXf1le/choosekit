@@ -58,6 +58,48 @@ test("llama.cpp benchmark creates its output directory before inference", () => 
   assert.equal(report.results.length, 1);
   assert.equal(report.summary.errors, 1);
   assert.match(report.results[0].error, /Intentional benchmark test failure/);
+  assert.equal(report.runtime.modelChecked, true);
+  assert.equal(report.runtime.resolvedModel, "qwen3.8-27b-text-64k");
+});
+
+test("llama.cpp benchmark refuses a model the server does not serve", () => {
+  const output = temporaryPath("qwen.json");
+  const result = run("run-semif.mjs", [
+    "--input", input, "--output", output, "--limit", "1",
+  ], {
+    CHOOSEKIT_EXPECT_OUTPUT_PARENT: dirname(output),
+    CHOOSEKIT_SERVED_MODELS: "/gguf/LFM2.5-1.2B-Instruct-Q8_0.gguf",
+  });
+
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /serves "\/gguf\/LFM2\.5-1\.2B-Instruct-Q8_0\.gguf", not "qwen3\.8-27b-text-64k"/);
+  assert.throws(() => readFileSync(output));
+});
+
+test("llama.cpp benchmark explains an unreachable model list", () => {
+  const output = temporaryPath("qwen.json");
+  const result = run("run-semif.mjs", [
+    "--input", input, "--output", output, "--limit", "1",
+  ], { CHOOSEKIT_EXPECT_OUTPUT_PARENT: dirname(output), CHOOSEKIT_MODELS_STATUS: "404" });
+
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /Could not list the models at .*\/v1\/models: HTTP 404/);
+  assert.match(result.stderr, /--skip-model-check/);
+});
+
+test("llama.cpp benchmark records an unchecked run as unchecked", () => {
+  const output = temporaryPath("qwen.json");
+  const result = run("run-semif.mjs", [
+    "--input", input, "--output", output, "--limit", "1", "--skip-model-check",
+  ], {
+    CHOOSEKIT_EXPECT_OUTPUT_PARENT: dirname(output),
+    CHOOSEKIT_SERVED_MODELS: "/gguf/LFM2.5-1.2B-Instruct-Q8_0.gguf",
+  });
+
+  assert.equal(result.status, 0, result.stderr);
+  const report = JSON.parse(readFileSync(output, "utf8"));
+  assert.equal(report.runtime.modelChecked, false);
+  assert.equal(report.runtime.resolvedModel, null);
 });
 
 test("OpenRouter benchmark creates its output directory before inference", () => {
