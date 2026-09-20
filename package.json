@@ -1,6 +1,6 @@
 {
   "name": "choosekit",
-  "version": "0.4.2",
+  "version": "0.5.0",
   "description": "Typed choices from your existing language model scorer.",
   "license": "Apache-2.0",
   "author": {
@@ -40,6 +40,16 @@
         "default": "./dist/cjs/llama-cpp.js"
       }
     },
+    "./openrouter": {
+      "import": {
+        "types": "./dist/esm/openrouter.d.ts",
+        "default": "./dist/esm/openrouter.js"
+      },
+      "require": {
+        "types": "./dist/cjs/openrouter.d.ts",
+        "default": "./dist/cjs/openrouter.js"
+      }
+    },
     "./package.json": "./package.json"
   },
   "files": [
@@ -69,6 +79,7 @@
     "choices",
     "logprobs",
     "llama.cpp",
+    "openrouter",
     "typescript"
   ]
 }

@@ -14,6 +14,8 @@ test("ESM and CommonJS public exports implement the same API", async () => {
   assert.deepEqual(a, b);
   assert.equal(typeof (await import("choosekit/llama-cpp")).fromLlamaCpp, "function");
   assert.equal(typeof createRequire(import.meta.url)("choosekit/llama-cpp").fromLlamaCpp, "function");
+  assert.equal(typeof (await import("choosekit/openrouter")).fromOpenRouter, "function");
+  assert.equal(typeof createRequire(import.meta.url)("choosekit/openrouter").fromOpenRouter, "function");
 });
 
 test("has no runtime dependencies, install hooks or executable", () => {
@@ -32,6 +34,7 @@ test("importing public entrypoints does not call fetch or log anything", () => {
     globalThis.fetch = () => { throw new Error("Unexpected network call"); };
     await import("choosekit");
     await import("choosekit/llama-cpp");
+    await import("choosekit/openrouter");
   `;
   const result = spawnSync(process.execPath, ["--input-type=module", "-e", code],
     { cwd: new URL("../", import.meta.url), encoding: "utf8" });

@@ -172,7 +172,7 @@ for (let index = 0; index < rows.length; index++) {
       totalRows: allRows.length,
       selectedRows: rows.length,
     },
-    runtime: { baseURL, model, mode, adapter: "choosekit/llama-cpp", packageVersion: "0.4.2" },
+    runtime: { baseURL, model, mode, adapter: "choosekit/llama-cpp", packageVersion: "0.5.0" },
     interpretation: mode === "labels"
       ? "Package A/B/C label prompt and distinguishing-token likelihoods."
       : "Package original-key prompt and minimal distinguishing-prefix likelihoods.",
