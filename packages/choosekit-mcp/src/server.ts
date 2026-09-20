@@ -6,6 +6,7 @@ import { z } from "zod";
 export type ChoiceMode = "labels" | "minimal-prefix";
 
 export interface ServerOptions {
+  readonly backend?: "llama-cpp" | "openrouter";
   readonly mode?: ChoiceMode;
 }
 
@@ -21,14 +22,14 @@ const usageSchema = z.object({
 const decisionSchema = z.object({
   choice: z.string(),
   distribution: z.record(z.string(), z.number().finite().min(0).max(1)),
-  scores: z.record(z.string(), z.number().finite().max(0)),
+  scores: z.record(z.string(), z.union([z.number().finite().max(0), z.null()])),
   margin: z.number().finite().min(0).max(1),
   entropy: z.number().finite().nonnegative(),
   boundaryTokens: z.number().int().nonnegative(),
   usage: usageSchema.optional(),
 }).strict();
 
-function inputSchema(mode: ChoiceMode) {
+function inputSchema(backend: "llama-cpp" | "openrouter", mode: ChoiceMode) {
   const choicesSchema = z.fromJSONSchema({
     type: "object",
     propertyNames: {
@@ -40,7 +41,9 @@ function inputSchema(mode: ChoiceMode) {
       pattern: "\\S",
     },
     minProperties: 2,
-    ...(mode === "labels" ? { maxProperties: 26 } : {}),
+    ...(backend === "openrouter"
+      ? { maxProperties: 20 }
+      : mode === "labels" ? { maxProperties: 26 } : {}),
   }) as z.ZodType<Record<string, string>>;
 
   return z.object({
@@ -65,7 +68,7 @@ function errorResult(error: unknown, signal: AbortSignal) {
   if (error instanceof ScoringError) {
     return {
       isError: true as const,
-      content: [{ type: "text" as const, text: "llama.cpp could not score the supplied choices." }],
+      content: [{ type: "text" as const, text: "The model could not score the supplied choices." }],
     };
   }
   return {
@@ -74,8 +77,18 @@ function errorResult(error: unknown, signal: AbortSignal) {
   };
 }
 
+function wireScores(scores: Readonly<Record<string, number>>):
+Readonly<Record<string, number | null>> {
+  return Object.fromEntries(Object.entries(scores).map(([key, score]) =>
+    [key, score === -Infinity ? null : score]));
+}
+
 export function buildServer(chooser: Chooser, options: ServerOptions = {}): McpServer {
   if (typeof chooser !== "function") throw new TypeError("chooser must be a function.");
+  const backend = options.backend ?? "llama-cpp";
+  if (backend !== "llama-cpp" && backend !== "openrouter") {
+    throw new TypeError("backend must be llama-cpp or openrouter.");
+  }
   const mode = options.mode ?? "labels";
   if (mode !== "labels" && mode !== "minimal-prefix") {
     throw new TypeError("mode must be labels or minimal-prefix.");
@@ -86,11 +99,11 @@ export function buildServer(chooser: Chooser, options: ServerOptions = {}): McpS
     "choose",
     {
       description: toolDescription(mode),
-      inputSchema: inputSchema(mode),
+      inputSchema: inputSchema(backend, mode),
       outputSchema: decisionSchema,
       annotations: {
         readOnlyHint: true,
-        openWorldHint: false,
+        openWorldHint: backend === "openrouter",
       },
     },
     async ({ context, question, choices }, ctx) => {
@@ -104,7 +117,7 @@ export function buildServer(chooser: Chooser, options: ServerOptions = {}): McpS
         const structuredContent: {
           choice: string;
           distribution: Readonly<Record<string, number>>;
-          scores: Readonly<Record<string, number>>;
+          scores: Readonly<Record<string, number | null>>;
           margin: number;
           entropy: number;
           boundaryTokens: number;
@@ -112,7 +125,7 @@ export function buildServer(chooser: Chooser, options: ServerOptions = {}): McpS
         } = {
           choice: decision.choice,
           distribution: decision.distribution,
-          scores: decision.scores,
+          scores: wireScores(decision.scores),
           margin: decision.margin,
           entropy: decision.entropy,
           boundaryTokens: decision.boundaryTokens,

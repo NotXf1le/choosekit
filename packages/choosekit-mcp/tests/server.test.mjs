@@ -85,7 +85,7 @@ async function callChoose(connection, arguments_) {
   return connection.rpc("tools/call", { name: "choose", arguments: arguments_ });
 }
 
-test("exposes a strict, read-only choose tool", async (t) => {
+test("exposes a strict, read-only llama.cpp choose tool", async (t) => {
   const connection = await connect(async () => assert.fail("chooser should not run"));
   t.after(() => connection.close());
 
@@ -96,9 +96,60 @@ test("exposes a strict, read-only choose tool", async (t) => {
   assert.equal(tool.inputSchema.additionalProperties, false);
   assert.equal(tool.outputSchema.additionalProperties, false);
 
-  const invalid = await callChoose(connection, { ...request, endpoint: "https://example.com" });
+  const invalid = await callChoose(connection, { ...request, backend: "not allowed" });
   assert.equal(invalid.result.isError, true);
-  assert.match(invalid.result.content[0].text, /endpoint|unrecognized|additional/i);
+  assert.match(invalid.result.content[0].text, /backend|unrecognized|additional/i);
+});
+
+test("marks the OpenRouter tool as open-world", async (t) => {
+  const connection = await connect(async () => assert.fail("chooser should not run"), {
+    backend: "openrouter",
+  });
+  t.after(() => connection.close());
+
+  const listed = await connection.rpc("tools/list");
+  assert.deepEqual(listed.result.tools[0].annotations, {
+    readOnlyHint: true,
+    openWorldHint: true,
+  });
+});
+
+test("OpenRouter accepts 20 choices and preserves the selected choice key", async (t) => {
+  const choices = Object.fromEntries(Array.from({ length: 20 }, (_, index) =>
+    [`choice_${index}`, `Choice ${index}`]));
+  let receivedChoices;
+  const chooser = async ({ choices: supplied }) => {
+    receivedChoices = supplied;
+    return {
+      choice: "choice_19",
+      distribution: Object.fromEntries(Object.keys(supplied).map((key) =>
+        [key, key === "choice_19" ? 1 : 0])),
+      scores: Object.fromEntries(Object.keys(supplied).map((key) => [key, -1])),
+      margin: 1,
+      entropy: 0,
+      boundaryTokens: 1,
+    };
+  };
+  const connection = await connect(chooser, { backend: "openrouter" });
+  t.after(() => connection.close());
+
+  const response = await callChoose(connection, { ...request, choices });
+
+  assert.equal(response.result.structuredContent.choice, "choice_19");
+  assert.deepEqual(receivedChoices, choices);
+});
+
+test("OpenRouter rejects 21 choices before calling the chooser", async (t) => {
+  let called = false;
+  const connection = await connect(async () => { called = true; }, { backend: "openrouter" });
+  t.after(() => connection.close());
+  const choices = Object.fromEntries(Array.from({ length: 21 }, (_, index) =>
+    [`choice_${index}`, `Choice ${index}`]));
+
+  const response = await callChoose(connection, { ...request, choices });
+
+  assert.equal(response.result.isError, true);
+  assert.equal(called, false);
 });
 
 test("returns the same decision as the direct chooser in text and structured content", async (t) => {
@@ -112,10 +163,37 @@ test("returns the same decision as the direct chooser in text and structured con
   assert.deepEqual(JSON.parse(response.result.content[0].text), expected);
 });
 
+test("serializes unavailable scores as null", async (t) => {
+  const chooser = async () => ({
+    choice: "billing",
+    distribution: { billing: 1, technical: 0 },
+    scores: { billing: -0.2, technical: -Infinity },
+    margin: 1,
+    entropy: 0,
+    boundaryTokens: 1,
+  });
+  const connection = await connect(chooser, { backend: "openrouter" });
+  t.after(() => connection.close());
+
+  const response = await callChoose(connection, request);
+  const expected = {
+    choice: "billing",
+    distribution: { billing: 1, technical: 0 },
+    scores: { billing: -0.2, technical: null },
+    margin: 1,
+    entropy: 0,
+    boundaryTokens: 1,
+  };
+
+  assert.notEqual(response.result.isError, true);
+  assert.deepEqual(response.result.structuredContent, expected);
+  assert.deepEqual(JSON.parse(response.result.content[0].text), expected);
+});
+
 test("does not expose scorer or implementation errors", async (t) => {
   const cases = [
     [async () => { throw new ScoringError("secret upstream response"); },
-      "llama.cpp could not score the supplied choices."],
+      "The model could not score the supplied choices."],
     [async () => { throw new Error("secret implementation detail"); },
       "The choice request failed unexpectedly."],
   ];
