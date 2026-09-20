@@ -1,6 +1,6 @@
 # choosekit
 
-`choosekit` scores a finite set of choices with a language model you already run and returns a typed decision with a probability distribution.
+`choosekit` scores a finite set of choices with a language model and returns a typed decision with a probability distribution. It supports local llama.cpp models and an optional OpenRouter backend.
 
 ```sh
 npm install choosekit
@@ -18,7 +18,7 @@ Agents often need to choose from known options:
 
 `choosekit` scores choices using the model's conditional log probabilities at the token branches that distinguish them.
 
-The project was inspired by [Jev and the System One model interface](https://typesafe.ai/blog/introducing-system-one-models-and-jev): application state in, typed probabilistic decisions out. Jev is a specialized hosted model. `choosekit` explores the same useful interface with a model you control. Application state stays on infrastructure you choose, and the decision path can use a model already running inside an existing deployment.
+The project was inspired by [Jev and the System One model interface](https://typesafe.ai/blog/introducing-system-one-models-and-jev): application state in, typed probabilistic decisions out. Jev is a specialized hosted model. `choosekit` explores the same useful interface with a model you control. The llama.cpp backend keeps application state on infrastructure you choose; OpenRouter is available when a hosted model is more convenient.
 
 `choosekit` is an independent project with no affiliation to TypeSafe or Jev.
 
@@ -46,7 +46,7 @@ console.log(decision.choice);       // "no"
 console.log(decision.distribution); // { yes: ..., no: ... }
 ```
 
-Compatibility requires the native llama.cpp `/tokenize` and `/completion` endpoints with raw pre-sampling log probabilities and returned token IDs. An OpenAI-compatible `/v1` endpoint alone lacks these capabilities.
+The llama.cpp backend requires its native `/tokenize` and `/completion` endpoints. `minimal-prefix` is available only with this backend.
 
 The library has no telemetry.
 
@@ -54,12 +54,35 @@ The library has no telemetry.
 
 [`choosekit-mcp`](packages/choosekit-mcp/README.md) exposes the same local llama.cpp decision interface as a read-only stdio tool for Claude Code, Codex, and OpenCode. Configure the llama.cpp endpoint, model, and scoring mode with environment variables when starting the MCP server. Every `choose` call uses this configuration.
 
+## OpenRouter
+
+```ts
+import { fromOpenRouter } from "choosekit/openrouter";
+
+const choose = fromOpenRouter({
+  apiKey: process.env.OPENROUTER_API_KEY!,
+  model: "qwen/qwen3.8-27b",
+});
+```
+
+The OpenRouter backend supports models and providers that return first-token `top_logprobs`, with up to 20 choices. Unlike llama.cpp, this backend sends the prompt to OpenRouter. It requests reasoning to be disabled. Choices omitted from `top_logprobs` receive zero probability. Returned probabilities are normalized across the supplied choices and are not calibrated correctness estimates.
+
+OpenRouter may route the same model through different providers. Set `provider` to an OpenRouter provider slug to use only that provider and disable fallback:
+
+```ts
+const choose = fromOpenRouter({
+  apiKey: process.env.OPENROUTER_API_KEY!,
+  model: "qwen/qwen3.8-27b",
+  provider: process.env.OPENROUTER_PROVIDER!,
+});
+```
+
 ## Scoring modes
 
 | Mode | Candidate representation | Use when |
 |---|---|---|
-| `labels` | `A`, `B`, `C`, ... | Default. The choice set has at most 26 entries. |
-| `minimal-prefix` | Original JSON-quoted keys | The key names should influence the decision, or the set has more than 26 entries. |
+| `labels` | `A`, `B`, `C`, ... | Default. Up to 26 choices with llama.cpp or 20 with OpenRouter. |
+| `minimal-prefix` | Original JSON-quoted keys | llama.cpp only. Use when key names should influence the decision. |
 
 In `labels` mode, choices are shown to the model as `A`, `B`, `C` instead of their original keys. For example, `refund: "Issue the refund"` is shown as `"A": "Issue the refund"`. Each description must therefore make the option clear. `choosekit` maps the selected label back to the original key.
 
@@ -125,18 +148,7 @@ Most distributions are similar. Some differ substantially: the systems select di
 
 `context` is copied unchanged to the start of the scoring prompt. The default formatter then appends the question, choice descriptions, and an answer marker.
 
-For chat models, `context` should be the model's normal serialized chat prefix. Use `formatPrompt` when the decision turn needs a particular template. This example uses Qwen's chat markers:
-
-```ts
-const choose = fromLlamaCpp({
-  baseURL: "http://127.0.0.1:8080/",
-  mode: "minimal-prefix",
-  formatPrompt: ({ context, instruction }) =>
-    `${context}<|im_start|>user\n${instruction}<|im_end|>\n<|im_start|>assistant\n`,
-});
-```
-
-The formatted prompt must start with `context` unchanged so an existing server-side prefix cache can still be reused.
+Use `formatPrompt` only when you need custom prompt formatting. The result must preserve `context` as an unchanged prefix so an existing server-side prefix cache can still be reused.
 
 ## Custom scorer
 

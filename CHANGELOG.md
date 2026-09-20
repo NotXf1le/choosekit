@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.5.0 - 2026-09-20
+
+- Added label scoring through OpenRouter with `choosekit/openrouter`.
+
 ## 0.4.2
 
 - Made the request cancellation signal available to custom prompt formatters.
