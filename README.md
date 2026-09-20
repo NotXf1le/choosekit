@@ -52,7 +52,7 @@ The library has no telemetry.
 
 ### MCP server
 
-[`choosekit-mcp`](packages/choosekit-mcp/README.md) exposes the same local llama.cpp decision interface as a read-only stdio tool for Claude Code, Codex, and OpenCode. Configure the llama.cpp endpoint, model, and scoring mode with environment variables when starting the MCP server. Every `choose` call uses this configuration.
+[`choosekit-mcp`](packages/choosekit-mcp/README.md) exposes choosekit through llama.cpp or OpenRouter as a read-only stdio tool for Claude Code, Codex, and OpenCode. Select the backend and configure it with environment variables when starting the MCP server. Every `choose` call uses this configuration.
 
 ## OpenRouter
 

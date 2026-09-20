@@ -11,6 +11,19 @@ const npmCli = process.platform === "win32"
   ? join(dirname(process.execPath), "node_modules", "npm", "bin", "npm-cli.js")
   : undefined;
 
+function llamaEnvironment() {
+  const env = { ...process.env };
+  for (const key of [
+    "CHOOSEKIT_BACKEND",
+    "CHOOSEKIT_BASE_URL",
+    "CHOOSEKIT_MODEL",
+    "CHOOSEKIT_MODE",
+    "OPENROUTER_API_KEY",
+    "OPENROUTER_PROVIDER",
+  ]) delete env[key];
+  return { ...env, CHOOSEKIT_BACKEND: "llama-cpp", CHOOSEKIT_BASE_URL: "" };
+}
+
 function spawnNpm(args, options = {}) {
   return npmCli
     ? spawnSync(process.execPath, [npmCli, ...args], { encoding: "utf8", ...options })
@@ -40,7 +53,7 @@ test("the packed package installs and exposes its executable", (t) => {
 
   const launched = spawnNpm(["exec", "--no", "--", "choosekit-mcp"], {
     cwd: temporary,
-    env: { ...process.env, CHOOSEKIT_BASE_URL: "" },
+    env: llamaEnvironment(),
     timeout: 10_000,
   });
   assert.equal(launched.error, undefined, launched.error?.message);

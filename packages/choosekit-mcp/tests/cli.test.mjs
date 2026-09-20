@@ -6,18 +6,38 @@ import { fileURLToPath } from "node:url";
 
 const packageRoot = new URL("../", import.meta.url);
 const cli = fileURLToPath(new URL("../dist/cli.js", import.meta.url));
+const openRouterFetchFixture = new URL("./fixtures/openrouter-fetch.mjs", import.meta.url).href;
+const request = Object.freeze({
+  context: "A payout failed.",
+  question: "Which team should handle this?",
+  choices: Object.freeze({
+    billing: "Payments, payouts, invoices, and refunds",
+    technical: "Bugs, outages, integrations, and API errors",
+  }),
+});
+
+const configurationKeys = [
+  "CHOOSEKIT_BACKEND",
+  "CHOOSEKIT_BASE_URL",
+  "CHOOSEKIT_MODEL",
+  "CHOOSEKIT_MODE",
+  "OPENROUTER_API_KEY",
+  "OPENROUTER_PROVIDER",
+];
 
 function cliEnvironment(overrides = {}) {
+  const env = { ...process.env };
+  for (const key of configurationKeys) delete env[key];
   return {
-    ...process.env,
+    ...env,
     CHOOSEKIT_BASE_URL: "http://127.0.0.1:1",
     CHOOSEKIT_MODE: "labels",
     ...overrides,
   };
 }
 
-function startCli(env = cliEnvironment()) {
-  const child = spawn(process.execPath, [cli], {
+function startCli(env = cliEnvironment(), nodeArguments = []) {
+  const child = spawn(process.execPath, [...nodeArguments, cli], {
     cwd: packageRoot,
     env,
     stdio: ["pipe", "pipe", "pipe"],
@@ -104,11 +124,28 @@ async function initialize(process_) {
 
 test("reports invalid environment configuration without writing to stdout", () => {
   const cases = [
-    ["missing base URL", { CHOOSEKIT_BASE_URL: "" }],
-    ["invalid base URL", { CHOOSEKIT_BASE_URL: "not a URL" }],
-    ["invalid mode", { CHOOSEKIT_MODE: "keys" }],
+    ["missing base URL", { CHOOSEKIT_BASE_URL: "" },
+      "CHOOSEKIT_BASE_URL is required."],
+    ["invalid base URL", { CHOOSEKIT_BASE_URL: "not a URL" },
+      "CHOOSEKIT_BASE_URL must be a valid URL."],
+    ["invalid mode", { CHOOSEKIT_MODE: "keys" },
+      "CHOOSEKIT_MODE must be labels or minimal-prefix."],
+    ["unknown backend", { CHOOSEKIT_BACKEND: "other" },
+      "CHOOSEKIT_BACKEND must be llama-cpp or openrouter."],
+    ["OpenRouter without API key", {
+      CHOOSEKIT_BACKEND: "openrouter", CHOOSEKIT_MODEL: "test/model",
+    }, "OPENROUTER_API_KEY is required."],
+    ["OpenRouter without model", {
+      CHOOSEKIT_BACKEND: "openrouter", OPENROUTER_API_KEY: "test-secret",
+    }, "CHOOSEKIT_MODEL is required."],
+    ["OpenRouter with minimal-prefix", {
+      CHOOSEKIT_BACKEND: "openrouter",
+      CHOOSEKIT_MODEL: "test/model",
+      CHOOSEKIT_MODE: "minimal-prefix",
+      OPENROUTER_API_KEY: "test-secret",
+    }, "CHOOSEKIT_MODE must be labels when using OpenRouter."],
   ];
-  for (const [name, override] of cases) {
+  for (const [name, override, expectedMessage] of cases) {
     const result = spawnSync(process.execPath, [cli], {
       cwd: packageRoot,
       env: cliEnvironment(override),
@@ -116,11 +153,11 @@ test("reports invalid environment configuration without writing to stdout", () =
     });
     assert.equal(result.status, 1, name);
     assert.equal(result.stdout, "", name);
-    assert.match(result.stderr, /^choosekit-mcp:/, name);
+    assert.equal(result.stderr, `choosekit-mcp: ${expectedMessage}\n`, name);
   }
 });
 
-test("lists tools without contacting llama.cpp and writes only MCP messages to stdout", async (t) => {
+test("defaults to llama.cpp and lists tools without contacting it", async (t) => {
   const process_ = startCli();
   t.after(() => process_.close());
   await initialize(process_);
@@ -130,6 +167,32 @@ test("lists tools without contacting llama.cpp and writes only MCP messages to s
   assert.deepEqual(response.result.tools.map((tool) => tool.name), ["choose"]);
   assert.ok(process_.lines.length >= 2);
   for (const line of process_.lines) assert.doesNotThrow(() => JSON.parse(line));
+});
+
+test("serves an OpenRouter choice with key, model, and provider kept process-local", async (t) => {
+  const secret = "openrouter-secret-that-must-not-leak";
+  const process_ = startCli(cliEnvironment({
+    CHOOSEKIT_BACKEND: "openrouter",
+    CHOOSEKIT_BASE_URL: "",
+    CHOOSEKIT_MODEL: "fixture/model",
+    OPENROUTER_API_KEY: secret,
+    OPENROUTER_PROVIDER: "fixture-provider",
+  }), ["--import", openRouterFetchFixture]);
+  let stderr = "";
+  process_.child.stderr.setEncoding("utf8");
+  process_.child.stderr.on("data", (chunk) => { stderr += chunk; });
+  t.after(() => process_.close());
+  await initialize(process_);
+
+  const response = await process_.rpc("tools/call", {
+    name: "choose",
+    arguments: request,
+  });
+
+  assert.equal(response.result.structuredContent.choice, "technical");
+  assert.deepEqual(JSON.parse(response.result.content[0].text), response.result.structuredContent);
+  assert.doesNotMatch(process_.lines.join("\n"), new RegExp(secret));
+  assert.doesNotMatch(stderr, new RegExp(secret));
 });
 
 test("serves a minimal-prefix choice using the configured llama.cpp endpoint", async (t) => {
