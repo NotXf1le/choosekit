@@ -18,7 +18,7 @@
   },
   "type": "module",
   "bin": {
-    "choosekit-mcp": "./dist/cli.js"
+    "choosekit-mcp": "dist/cli.js"
   },
   "files": [
     "dist",
