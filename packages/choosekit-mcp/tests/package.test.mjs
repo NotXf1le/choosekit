@@ -35,7 +35,7 @@ test("the packed package installs and exposes its executable", (t) => {
   const tarball = join(temporary, filename);
   runNpm(["init", "--yes"], { cwd: temporary });
   runNpm([
-    "install", tarball, "--offline", "--ignore-scripts", "--no-audit", "--no-fund",
+    "install", tarball, "--ignore-scripts", "--no-audit", "--no-fund",
   ], { cwd: temporary });
 
   const launched = spawnNpm(["exec", "--no", "--", "choosekit-mcp"], {
