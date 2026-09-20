@@ -31,7 +31,7 @@
   "scripts": {
     "build": "node scripts/build.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "npm run build && node --test --test-concurrency=1 tests/*.test.mjs",
+    "test": "npm run build && node --test --test-concurrency=1",
     "check": "npm run typecheck && npm test",
     "prepack": "npm run build"
   },
