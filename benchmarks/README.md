@@ -91,7 +91,15 @@ node benchmarks/run-semif.mjs \
   --base-url http://127.0.0.1:11434/ \
   --model qwen3.8-27b-text-64k \
   --output benchmarks/results/semif-qwen-labels.json
+```
 
+Before running, the script requires the selected model ID to appear in `GET /v1/models`. This prevents
+a report from being labelled with a model the server did not expose. Use `--skip-model-check` to bypass
+the check; the report then records `modelChecked: false` in its `runtime` block.
+
+Run the Jev comparison with an OpenRouter API key:
+
+```sh
 OPENROUTER_API_KEY=... node benchmarks/run-semif-openrouter-jev.mjs \
   --model typesafe/jev-1.13 \
   --output benchmarks/results/semif-jev-1.13.json

@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- Added an exact `/v1/models` check to the SemIf llama.cpp benchmark, with
+  `--skip-model-check` for unverified runs.
+
 ## 0.5.0 - 2026-09-20
 
 - Added label scoring through OpenRouter with `choosekit/openrouter`.

@@ -89,6 +89,48 @@ function summarize(results, startedAt) {
   };
 }
 
+/** llama.cpp serves /v1/models beside /completion; mirror the adapter's base-URL handling. */
+function modelsURL(baseURL) {
+  const url = new URL(baseURL);
+  if ((url.protocol !== "http:" && url.protocol !== "https:") || url.username || url.password
+    || url.search || url.hash) {
+    throw new TypeError("baseURL must be an HTTP(S) URL without credentials, query, or fragment.");
+  }
+  const path = url.pathname.replace(/\/v1\/?$/, "").replace(/\/$/, "");
+  url.pathname = `${path}/v1/models`;
+  return url.href;
+}
+
+async function servedModelIds(url) {
+  const response = await fetch(url, { signal: AbortSignal.timeout(30_000) });
+  if (!response.ok) throw new Error(`HTTP ${response.status} ${response.statusText}`);
+  const body = await response.json();
+  const entries = Array.isArray(body?.data) ? body.data : [];
+  const ids = entries.map((entry) => entry?.id).filter((id) => typeof id === "string" && id.length > 0);
+  if (ids.length === 0) throw new Error("the response listed no models");
+  return ids;
+}
+
+/** Verify that the report's model ID is listed by the server before inference. */
+async function checkModel(baseURL, model) {
+  const url = modelsURL(baseURL);
+  let ids;
+  try {
+    ids = await servedModelIds(url);
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : String(error);
+    throw new Error(`Could not list the models at ${url}: ${detail}.`
+      + " Ensure the server exposes /v1/models, or pass --skip-model-check"
+      + " to record the run as unverified.");
+  }
+  if (!ids.includes(model)) {
+    throw new Error(`The server at ${url} does not list "${model}".`
+      + ` Available models: ${ids.map((id) => `"${id}"`).join(", ")}.`
+      + " Pass --model with one of the IDs above, or --skip-model-check"
+      + " to record the run as unverified.");
+  }
+}
+
 const input = option("--input", "benchmarks/data/semif-authored144.jsonl");
 const mode = option("--mode", "labels");
 if (mode !== "labels" && mode !== "minimal-prefix") {
@@ -98,6 +140,7 @@ const output = option("--output", `benchmarks/results/semif-qwen3.8-27b-${mode}.
 const baseURL = option("--base-url", process.env.LLAMA_CPP_BASE_URL
   ?? "http://127.0.0.1:11434/");
 const model = option("--model", process.env.LLAMA_CPP_MODEL ?? "qwen3.8-27b-text-64k");
+const skipModelCheck = process.argv.includes("--skip-model-check");
 const rawLimit = option("--limit", undefined);
 const limit = rawLimit === undefined ? undefined : Number.parseInt(rawLimit, 10);
 
@@ -111,6 +154,11 @@ const allRows = source.toString("utf8").trim().split(/\r?\n/).map((line) => JSON
 if (allRows.length !== 144) throw new Error(`Expected 144 SemIf rows, received ${allRows.length}.`);
 const rows = limit === undefined ? allRows : allRows.slice(0, limit);
 mkdirSync(dirname(output), { recursive: true });
+if (skipModelCheck) console.warn(`--skip-model-check: recording unverified model ID "${model}".`);
+else {
+  await checkModel(baseURL, model);
+  console.log(`Model ID confirmed in the server catalog: ${model}`);
+}
 const choose = fromLlamaCpp({ baseURL, model, mode });
 const results = [];
 const startedAt = performance.now();
@@ -172,7 +220,14 @@ for (let index = 0; index < rows.length; index++) {
       totalRows: allRows.length,
       selectedRows: rows.length,
     },
-    runtime: { baseURL, model, mode, adapter: "choosekit/llama-cpp", packageVersion: "0.5.0" },
+    runtime: {
+      baseURL,
+      model,
+      modelChecked: !skipModelCheck,
+      mode,
+      adapter: "choosekit/llama-cpp",
+      packageVersion: "0.5.0",
+    },
     interpretation: mode === "labels"
       ? "Package A/B/C label prompt and distinguishing-token likelihoods."
       : "Package original-key prompt and minimal distinguishing-prefix likelihoods.",
