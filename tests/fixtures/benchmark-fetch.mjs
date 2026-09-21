@@ -14,7 +14,7 @@ globalThis.fetch = async (input) => {
   const url = typeof input === "string" ? input : input.url;
   if (new URL(url).pathname.endsWith("/v1/models")) {
     if (process.env.CHOOSEKIT_MODELS_STATUS) {
-      return new Response("nope", { status: Number(process.env.CHOOSEKIT_MODELS_STATUS) });
+      return new Response("model list unavailable", { status: Number(process.env.CHOOSEKIT_MODELS_STATUS) });
     }
     return servedModels();
   }

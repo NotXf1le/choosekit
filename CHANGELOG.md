@@ -2,7 +2,8 @@
 
 ## Unreleased
 
-- Confirmed the SemIf benchmark's `--model` against the server's `/v1/models` before running, since llama.cpp answers with whatever is loaded however the request names the model. `--skip-model-check` keeps the old behaviour and records the run as unchecked.
+- Added an exact `/v1/models` check to the SemIf llama.cpp benchmark, with
+  `--skip-model-check` for unverified runs.
 
 ## 0.5.0 - 2026-09-20
 

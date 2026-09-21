@@ -71,7 +71,8 @@ test("llama.cpp benchmark refuses a model the server does not serve", () => {
   });
 
   assert.notEqual(result.status, 0);
-  assert.match(result.stderr, /serves "\/gguf\/LFM2\.5-1\.2B-Instruct-Q8_0\.gguf", not "qwen3\.8-27b-text-64k"/);
+  assert.match(result.stderr, /does not list "qwen3\.8-27b-text-64k"/);
+  assert.match(result.stderr, /Available models: "\/gguf\/LFM2\.5-1\.2B-Instruct-Q8_0\.gguf"/);
   assert.throws(() => readFileSync(output));
 });
 

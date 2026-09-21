@@ -111,11 +111,7 @@ async function servedModelIds(url) {
   return ids;
 }
 
-/**
- * llama.cpp answers with whatever is loaded however the request names the
- * model, so an unchecked --model puts a name in the results that may never
- * have run. Confirm it against the server before spending an hour on rows.
- */
+/** Verify that the report's model ID is listed by the server before inference. */
 async function checkModel(baseURL, model) {
   const url = modelsURL(baseURL);
   let ids;
@@ -124,13 +120,14 @@ async function checkModel(baseURL, model) {
   } catch (error) {
     const detail = error instanceof Error ? error.message : String(error);
     throw new Error(`Could not list the models at ${url}: ${detail}.`
-      + " Start the server first, or pass --skip-model-check to record the run as unverified.");
+      + " Ensure the server exposes /v1/models, or pass --skip-model-check"
+      + " to record the run as unverified.");
   }
   if (!ids.includes(model)) {
-    throw new Error(`The server at ${url} serves ${ids.map((id) => `"${id}"`).join(", ")},`
-      + ` not "${model}". llama.cpp answers with whatever is loaded however the request names the`
-      + " model, so these results would carry a model name that never ran."
-      + " Pass --model with one of the ids above, or --skip-model-check to record the run as unverified.");
+    throw new Error(`The server at ${url} does not list "${model}".`
+      + ` Available models: ${ids.map((id) => `"${id}"`).join(", ")}.`
+      + " Pass --model with one of the IDs above, or --skip-model-check"
+      + " to record the run as unverified.");
   }
 }
 
@@ -157,7 +154,7 @@ const allRows = source.toString("utf8").trim().split(/\r?\n/).map((line) => JSON
 if (allRows.length !== 144) throw new Error(`Expected 144 SemIf rows, received ${allRows.length}.`);
 const rows = limit === undefined ? allRows : allRows.slice(0, limit);
 mkdirSync(dirname(output), { recursive: true });
-if (skipModelCheck) console.warn("--skip-model-check: the recorded model is the one requested, unconfirmed.");
+if (skipModelCheck) console.warn(`--skip-model-check: recording unverified model ID "${model}".`);
 else {
   await checkModel(baseURL, model);
   console.log(`Model ID confirmed in the server catalog: ${model}`);
