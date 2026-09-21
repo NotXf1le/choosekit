@@ -40,6 +40,16 @@
         "default": "./dist/cjs/llama-cpp.js"
       }
     },
+    "./ollama": {
+      "import": {
+        "types": "./dist/esm/ollama.d.ts",
+        "default": "./dist/esm/ollama.js"
+      },
+      "require": {
+        "types": "./dist/cjs/ollama.d.ts",
+        "default": "./dist/cjs/ollama.js"
+      }
+    },
     "./openrouter": {
       "import": {
         "types": "./dist/esm/openrouter.d.ts",
@@ -79,6 +89,7 @@
     "choices",
     "logprobs",
     "llama.cpp",
+    "ollama",
     "openrouter",
     "typescript"
   ]
