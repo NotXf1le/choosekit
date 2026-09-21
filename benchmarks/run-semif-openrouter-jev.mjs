@@ -130,7 +130,7 @@ function validateAnswer(answer, optionIds) {
 }
 
 const input = option("--input", "benchmarks/data/semif-authored144.jsonl");
-const output = option("--output", "benchmarks/results/semif-openrouter-jev-latest.json");
+const output = option("--output", "benchmarks/results/semif-jev-1.13.json");
 const model = option("--model", "typesafe/jev-1.13");
 const rawLimit = option("--limit", undefined);
 const limit = rawLimit === undefined ? undefined : Number.parseInt(rawLimit, 10);

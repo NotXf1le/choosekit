@@ -76,6 +76,19 @@ test("OpenRouter benchmark creates its output directory before inference", () =>
   assert.match(report.results[0].error, /Intentional benchmark test failure/);
 });
 
+test("SuperGPQA pilot runs are limited to 100 questions", () => {
+  const result = run("run-supergpqa.mjs", [
+    "--backend", "llama-cpp",
+    "--base-url", "http://127.0.0.1:8080",
+    "--model", "test-model",
+    "--sample-method", "balanced",
+    "--sample-size", "101",
+  ]);
+
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /must not exceed 100 for balanced sampling/);
+});
+
 test("comparator creates a nested output for valid reports", () => {
   const qwen = temporaryPath("qwen.json");
   const jev = temporaryPath("jev.json");

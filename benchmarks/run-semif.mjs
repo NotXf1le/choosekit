@@ -94,7 +94,7 @@ const mode = option("--mode", "labels");
 if (mode !== "labels" && mode !== "minimal-prefix") {
   throw new TypeError("--mode must be labels or minimal-prefix.");
 }
-const output = option("--output", `benchmarks/results/semif-qwen3.8-27b-production-${mode}.json`);
+const output = option("--output", `benchmarks/results/semif-qwen3.8-27b-${mode}.json`);
 const baseURL = option("--base-url", process.env.LLAMA_CPP_BASE_URL
   ?? "http://127.0.0.1:11434/");
 const model = option("--model", process.env.LLAMA_CPP_MODEL ?? "qwen3.8-27b-text-64k");
