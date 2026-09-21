@@ -1,6 +1,6 @@
 # choosekit
 
-`choosekit` scores a finite set of choices with a language model and returns a typed decision with a probability distribution. It supports local llama.cpp models and an optional OpenRouter backend.
+`choosekit` scores a finite set of choices with a language model and returns a typed decision with a probability distribution. It supports local models through llama.cpp and Ollama, plus an optional OpenRouter backend.
 
 ![SuperGPQA direct-choice benchmark](benchmarks/supergpqa-benchmark.svg)
 
@@ -45,7 +45,7 @@ Agents often need to choose from known options:
 
 `choosekit` scores choices using the model's conditional log probabilities at the token branches that distinguish them.
 
-The project was inspired by [Jev and the System One model interface](https://typesafe.ai/blog/introducing-system-one-models-and-jev): application state in, typed probabilistic decisions out. Jev is a specialized hosted model. `choosekit` brings the same typed decision interface to general-purpose language models. The llama.cpp backend runs on infrastructure you choose; OpenRouter provides hosted inference.
+The project was inspired by [Jev and the System One model interface](https://typesafe.ai/blog/introducing-system-one-models-and-jev): application state in, typed probabilistic decisions out. Jev is a specialized hosted model. `choosekit` brings the same typed decision interface to general-purpose language models. The llama.cpp and Ollama backends run on infrastructure you choose; OpenRouter provides hosted inference.
 
 `choosekit` is an independent project with no affiliation to TypeSafe or Jev.
 
@@ -81,6 +81,16 @@ The llama.cpp backend requires its native `/tokenize` and `/completion` endpoint
 
 The library has no telemetry.
 
+## Ollama
+
+```ts
+import { fromOllama } from "choosekit/ollama";
+
+const choose = fromOllama({ model: "your-model" });
+```
+
+`model` is required. The adapter uses `http://127.0.0.1:11434/` by default and supports only `labels` mode with up to 20 choices. It requires Ollama 0.12.11 or newer.
+
 ## OpenRouter
 
 ```ts
@@ -94,7 +104,7 @@ const choose = fromOpenRouter({
 
 The OpenRouter backend supports models and providers that return first-token `top_logprobs`, with up to 20 choices. It sends the prompt to OpenRouter and requests reasoning to be disabled.
 
-Choices omitted from `top_logprobs` receive zero probability. Returned probabilities are normalized across the supplied choices and are not calibrated correctness estimates.
+Returned probabilities are normalized across the supplied choices and are not calibrated correctness estimates.
 
 OpenRouter may route the same model through different providers. Set `provider: "provider-slug"` to use only that provider and disable fallback.
 
@@ -102,8 +112,10 @@ OpenRouter may route the same model through different providers. Set `provider: 
 
 | Mode | Candidate representation | Use when |
 |---|---|---|
-| `labels` | `A`, `B`, `C`, ... | Default. Up to 26 choices with llama.cpp or 20 with OpenRouter. |
+| `labels` | `A`, `B`, `C`, ... | Default. Up to 26 choices with llama.cpp or 20 with Ollama or OpenRouter. |
 | `minimal-prefix` | Original JSON-quoted keys | llama.cpp only. Use when key names should influence the decision. |
+
+Choices for which the backend returns no logprob receive zero probability.
 
 In `labels` mode, choices are shown to the model as `A`, `B`, `C` instead of their original keys. For example, `refund: "Issue the refund"` is shown as `"A": "Issue the refund"`. Each description must therefore make the option clear. `choosekit` maps the selected label back to the original key.
 

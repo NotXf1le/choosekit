@@ -1,5 +1,6 @@
 import { createChooser, type Scorer, type Decision } from "choosekit";
 import { fromLlamaCpp } from "choosekit/llama-cpp";
+import { fromOllama } from "choosekit/ollama";
 import { fromOpenRouter } from "choosekit/openrouter";
 
 const scorer: Scorer = async ({ candidates, signal }) => {
@@ -31,6 +32,8 @@ void numericKey;
 
 const local = fromLlamaCpp({ baseURL: "http://127.0.0.1:8080", mode: "labels" });
 void local({ context: "", question: "?", choices: { yes: "Yes", no: "No" } });
+const ollama = fromOllama({ model: "test-model" });
+void ollama({ context: "", question: "?", choices: { yes: "Yes", no: "No" } });
 const remote = fromOpenRouter({ apiKey: "test-key", model: "test/model" });
 void remote({ context: "", question: "?", choices: { yes: "Yes", no: "No" } });
 
