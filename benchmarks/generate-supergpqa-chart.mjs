@@ -3,19 +3,19 @@ import { readFile, writeFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import {
   SUPERGPQA_EVALUATION_SAMPLE_SEED,
+  SUPERGPQA_PILOT_ROWS,
   SUPERGPQA_PREPARED_SHA256,
   sampleSuperGpqaEvaluationRows,
 } from "./prepare-supergpqa.mjs";
 
 const EVALUATION_ROWS = 1000;
-const COMPATIBILITY_SAMPLE_ROWS = 100;
 const benchmarksDirectory = new URL("./", import.meta.url);
 const runInputs = [
   {
     file: "supergpqa-granite-4.0-h-micro-cloudflare.json",
     id: "granite-4.0-h-micro",
     label: "Granite 4.0 H Micro",
-    series: "choosekit",
+    series: "openrouter",
     model: "ibm-granite/granite-4.0-h-micro",
     provider: "cloudflare",
     resolvedProvider: "Cloudflare",
@@ -24,7 +24,7 @@ const runInputs = [
     file: "supergpqa-llama-3.1-8b-novita.json",
     id: "llama-3.1-8b",
     label: "Llama 3.1 8B",
-    series: "choosekit",
+    series: "openrouter",
     model: "meta-llama/llama-3.1-8b-instruct",
     provider: "novita",
     resolvedProvider: "Novita",
@@ -34,7 +34,7 @@ const runInputs = [
     file: "supergpqa-glm-4.7-flash-cloudflare.json",
     id: "glm-4.7-flash",
     label: "GLM 4.7 Flash",
-    series: "choosekit",
+    series: "openrouter",
     model: "z-ai/glm-4.7-flash",
     provider: "cloudflare",
     resolvedProvider: "Cloudflare",
@@ -43,7 +43,7 @@ const runInputs = [
     file: "supergpqa-glm-5.2-cloudflare.json",
     id: "glm-5.2",
     label: "GLM 5.2",
-    series: "choosekit",
+    series: "openrouter",
     model: "z-ai/glm-5.2",
     provider: "cloudflare",
     resolvedProvider: "Cloudflare",
@@ -52,7 +52,7 @@ const runInputs = [
     file: "supergpqa-gemma-4-26b-dekallm.json",
     id: "gemma-4-26b",
     label: "Gemma 4 26B",
-    series: "choosekit",
+    series: "openrouter",
     model: "google/gemma-4-26b-a4b-it",
     provider: "dekallm",
     resolvedProvider: "DekaLLM",
@@ -61,7 +61,7 @@ const runInputs = [
     file: "supergpqa-granite-4.2-8b-coreweave.json",
     id: "granite-4.2-8b",
     label: "Granite 4.2 8B",
-    series: "choosekit",
+    series: "openrouter",
     model: "ibm-granite/granite-4.2-8b",
     provider: "coreweave",
     resolvedProvider: "CoreWeave",
@@ -71,7 +71,7 @@ const runInputs = [
     file: "supergpqa-deepseek-v4.1-flash-wafer.json",
     id: "deepseek-v4.1-flash",
     label: "DeepSeek V4.1 Flash",
-    series: "choosekit",
+    series: "openrouter",
     model: "deepseek/deepseek-v4.1-flash",
     provider: "wafer",
     resolvedProvider: "Wafer",
@@ -80,7 +80,7 @@ const runInputs = [
     file: "supergpqa-deepseek-v4-pro-cloudflare.json",
     id: "deepseek-v4-pro",
     label: "DeepSeek V4 Pro",
-    series: "choosekit",
+    series: "openrouter",
     model: "deepseek/deepseek-v4-pro-0813",
     provider: "cloudflare",
     resolvedProvider: "Cloudflare",
@@ -90,7 +90,7 @@ const runInputs = [
     file: "supergpqa-kimi-k3-morph.json",
     id: "kimi-k3",
     label: "Kimi K3",
-    series: "choosekit",
+    series: "openrouter",
     model: "moonshotai/kimi-k3",
     provider: "morph",
     resolvedProvider: "Morph",
@@ -155,8 +155,8 @@ async function loadRun(input) {
   invariant(report.dataset?.sample?.seed === SUPERGPQA_EVALUATION_SAMPLE_SEED,
     `${input.file}: unexpected sample seed`);
   invariant(
-    report.dataset?.sample?.excludedCompatibilitySampleSize === COMPATIBILITY_SAMPLE_ROWS,
-    `${input.file}: unexpected excluded compatibility sample size`,
+    report.dataset?.sample?.excludedPilotSampleSize === SUPERGPQA_PILOT_ROWS,
+    `${input.file}: unexpected excluded pilot sample size`,
   );
   invariant(
     report.summary?.rowsAttempted === EVALUATION_ROWS,
@@ -177,7 +177,7 @@ async function loadRun(input) {
     `${input.file}: expected ${EVALUATION_ROWS} result rows`);
   invariant(report.runtime?.model === input.model, `${input.file}: unexpected model`);
   invariant(report.runtime?.backend === input.series, `${input.file}: unexpected backend`);
-  if (input.series === "choosekit") {
+  if (input.series === "openrouter") {
     invariant(report.runtime?.provider === input.provider, `${input.file}: unexpected provider`);
     invariant(report.results.every((row) => row.resolvedModel === input.model),
       `${input.file}: OpenRouter resolved a different model`);
@@ -230,12 +230,12 @@ function renderSvg(aggregate) {
   const lines = [];
 
   lines.push(`<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" role="img" aria-labelledby="title desc">`);
-  lines.push("  <title id=\"title\">SuperGPQA frontier: ChooseKit models and Jev</title>");
+  lines.push("  <title id=\"title\">SuperGPQA benchmark: ChooseKit models and Jev</title>");
   lines.push(`  <desc id="desc">Accuracy on the same ${aggregate.dataset.rows} proportionally sampled questions. Only OpenRouter models with top_logprobs are included. Lower cost per decision times seconds per decision and higher accuracy are better. Vertical bars show 95 percent Wilson intervals. A horizontal line shows local Qwen3.8 27B Q4_XL accuracy without assigning it a cloud cost coordinate.</desc>`);
   lines.push(`  <rect width="${width}" height="${height}" rx="16" fill="#ffffff"/>`);
   lines.push("  <g font-family=\"Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif\">");
   lines.push(`    <text x="${plot.left}" y="31" fill="#111827" font-size="20" font-weight="650">SuperGPQA decision benchmark</text>`);
-  lines.push(`    <text x="${plot.left}" y="52" fill="#6b7280" font-size="12">proportional sample · ${aggregate.dataset.rows} questions · ChooseKit providers pinned · 2026-09-21</text>`);
+  lines.push(`    <text x="${plot.left}" y="52" fill="#6b7280" font-size="12">proportional sample · ${aggregate.dataset.rows} questions · ChooseKit OpenRouter providers pinned · 2026-09-21</text>`);
   lines.push(`    <line x1="548" y1="29" x2="558" y2="29" stroke="#15966b" stroke-width="1.5"/><text x="566" y="33" fill="#4b5563" font-size="11">ChooseKit + llama.cpp</text>`);
   lines.push(`    <circle cx="708" cy="29" r="5" fill="#356ae6"/><text x="720" y="33" fill="#4b5563" font-size="11">ChooseKit + OpenRouter</text>`);
   lines.push(`    <path d="M 874 23 L 880 29 L 874 35 L 868 29 Z" fill="#e85d3f"/><text x="888" y="33" fill="#4b5563" font-size="11">Jev</text>`);
@@ -315,7 +315,7 @@ invariant(evaluationRows.every(Boolean), "result IDs must exist in the prepared 
 const expectedEvaluationIds = sampleSuperGpqaEvaluationRows(
   preparedRows,
   EVALUATION_ROWS,
-  COMPATIBILITY_SAMPLE_ROWS,
+  SUPERGPQA_PILOT_ROWS,
 ).map(({ id }) => id);
 invariant(JSON.stringify(loadedRuns[0].ids) === JSON.stringify(expectedEvaluationIds),
   "reports must contain the expected evaluation sample in order");
@@ -336,9 +336,9 @@ const aggregate = {
 };
 
 await writeFile(
-  new URL("supergpqa-frontier.json", benchmarksDirectory),
+  new URL("supergpqa-benchmark.json", benchmarksDirectory),
   `${JSON.stringify(aggregate, null, 2)}\n`,
 );
-await writeFile(new URL("supergpqa-frontier.svg", benchmarksDirectory), renderSvg(aggregate));
-console.log(`Wrote ${fileURLToPath(new URL("supergpqa-frontier.json", benchmarksDirectory))}`);
-console.log(`Wrote ${fileURLToPath(new URL("supergpqa-frontier.svg", benchmarksDirectory))}`);
+await writeFile(new URL("supergpqa-benchmark.svg", benchmarksDirectory), renderSvg(aggregate));
+console.log(`Wrote ${fileURLToPath(new URL("supergpqa-benchmark.json", benchmarksDirectory))}`);
+console.log(`Wrote ${fileURLToPath(new URL("supergpqa-benchmark.svg", benchmarksDirectory))}`);

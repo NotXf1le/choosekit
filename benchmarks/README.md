@@ -5,6 +5,8 @@
 The chart uses a deterministic 1,000-question sample stratified by discipline and
 difficulty. The random-choice baseline is the mean of `1 / number of choices` across
 the sample. OpenRouter models are included only when they return `top_logprobs`.
+The evaluation sample excludes a deterministic 100-question pilot used to select
+working model and provider pairs.
 
 ### Prepare the dataset
 
@@ -21,7 +23,7 @@ npm run build
 
 ```sh
 OPENROUTER_API_KEY=... node benchmarks/run-supergpqa.mjs \
-  --backend choosekit \
+  --backend openrouter \
   --model ibm-granite/granite-4.0-h-micro \
   --provider cloudflare \
   --sample-method proportional \
@@ -69,7 +71,7 @@ The X axis is average cost per decision multiplied by seconds per decision. The 
 model is shown as a horizontal accuracy line.
 
 ```sh
-node benchmarks/generate-supergpqa-frontier.mjs
+node benchmarks/generate-supergpqa-chart.mjs
 ```
 
 ## SemIf

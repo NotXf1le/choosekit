@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   prepareSuperGpqaRows,
-  sampleSuperGpqaCompatibilityRows,
+  sampleSuperGpqaPilotRows,
   sampleSuperGpqaEvaluationRows,
   sampleSuperGpqaStratifiedRows,
 } from "../benchmarks/prepare-supergpqa.mjs";
@@ -51,7 +51,7 @@ test("samples discipline and difficulty strata deterministically", () => {
     }
   }
   const prepared = prepareSuperGpqaRows(source);
-  const sample = sampleSuperGpqaCompatibilityRows(prepared, 8);
+  const sample = sampleSuperGpqaPilotRows(prepared, 8);
   const counts = sample.reduce((map, item) => {
     const key = `${item.metadata.discipline}/${item.metadata.difficulty}`;
     map[key] = (map[key] ?? 0) + 1;
@@ -60,7 +60,7 @@ test("samples discipline and difficulty strata deterministically", () => {
   assert.deepEqual(Object.values(counts).sort(), [2, 2, 2, 2]);
   assert.deepEqual(
     sample.map(({ id }) => id),
-    sampleSuperGpqaCompatibilityRows([...prepared].reverse(), 8).map(({ id }) => id),
+    sampleSuperGpqaPilotRows([...prepared].reverse(), 8).map(({ id }) => id),
   );
 });
 
@@ -69,7 +69,7 @@ test("rejects malformed rows and sample sizes", () => {
   assert.throws(() => prepareSuperGpqaRows([row({ options: ["First"] })]), /invalid options/);
   assert.throws(() => prepareSuperGpqaRows([row({ answer_letter: "C" })]), /outside its options/);
   assert.throws(
-    () => sampleSuperGpqaCompatibilityRows(prepareSuperGpqaRows([row()]), 2),
+    () => sampleSuperGpqaPilotRows(prepareSuperGpqaRows([row()]), 2),
     /sample size/,
   );
 });
@@ -92,7 +92,7 @@ test("samples discipline and difficulty strata proportionally and deterministica
   );
 });
 
-test("keeps the evaluation sample disjoint from the compatibility sample", () => {
+test("keeps the evaluation sample disjoint from the pilot sample", () => {
   const source = [];
   for (const discipline of ["Science", "Law"]) {
     for (let index = 0; index < 10; index++) {
@@ -100,11 +100,11 @@ test("keeps the evaluation sample disjoint from the compatibility sample", () =>
     }
   }
   const prepared = prepareSuperGpqaRows(source);
-  const compatibilityIds = new Set(
-    sampleSuperGpqaCompatibilityRows(prepared, 4).map(({ id }) => id),
+  const pilotIds = new Set(
+    sampleSuperGpqaPilotRows(prepared, 4).map(({ id }) => id),
   );
   const evaluation = sampleSuperGpqaEvaluationRows(prepared, 10, 4);
-  assert.equal(evaluation.some(({ id }) => compatibilityIds.has(id)), false);
+  assert.equal(evaluation.some(({ id }) => pilotIds.has(id)), false);
   assert.deepEqual(
     evaluation.map(({ id }) => id),
     sampleSuperGpqaEvaluationRows([...prepared].reverse(), 10, 4).map(({ id }) => id),

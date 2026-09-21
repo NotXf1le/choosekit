@@ -9,7 +9,7 @@
     {
       "id": "granite-4.0-h-micro",
       "label": "Granite 4.0 H Micro",
-      "series": "choosekit",
+      "series": "openrouter",
       "model": "ibm-granite/granite-4.0-h-micro",
       "provider": "cloudflare",
       "resolvedProvider": "Cloudflare",
@@ -21,7 +21,7 @@
     {
       "id": "llama-3.1-8b",
       "label": "Llama 3.1 8B",
-      "series": "choosekit",
+      "series": "openrouter",
       "model": "meta-llama/llama-3.1-8b-instruct",
       "provider": "novita",
       "resolvedProvider": "Novita",
@@ -34,7 +34,7 @@
     {
       "id": "glm-4.7-flash",
       "label": "GLM 4.7 Flash",
-      "series": "choosekit",
+      "series": "openrouter",
       "model": "z-ai/glm-4.7-flash",
       "provider": "cloudflare",
       "resolvedProvider": "Cloudflare",
@@ -46,7 +46,7 @@
     {
       "id": "glm-5.2",
       "label": "GLM 5.2",
-      "series": "choosekit",
+      "series": "openrouter",
       "model": "z-ai/glm-5.2",
       "provider": "cloudflare",
       "resolvedProvider": "Cloudflare",
@@ -58,7 +58,7 @@
     {
       "id": "gemma-4-26b",
       "label": "Gemma 4 26B",
-      "series": "choosekit",
+      "series": "openrouter",
       "model": "google/gemma-4-26b-a4b-it",
       "provider": "dekallm",
       "resolvedProvider": "DekaLLM",
@@ -70,7 +70,7 @@
     {
       "id": "granite-4.2-8b",
       "label": "Granite 4.2 8B",
-      "series": "choosekit",
+      "series": "openrouter",
       "model": "ibm-granite/granite-4.2-8b",
       "provider": "coreweave",
       "resolvedProvider": "CoreWeave",
@@ -83,7 +83,7 @@
     {
       "id": "deepseek-v4.1-flash",
       "label": "DeepSeek V4.1 Flash",
-      "series": "choosekit",
+      "series": "openrouter",
       "model": "deepseek/deepseek-v4.1-flash",
       "provider": "wafer",
       "resolvedProvider": "Wafer",
@@ -95,7 +95,7 @@
     {
       "id": "deepseek-v4-pro",
       "label": "DeepSeek V4 Pro",
-      "series": "choosekit",
+      "series": "openrouter",
       "model": "deepseek/deepseek-v4-pro-0813",
       "provider": "cloudflare",
       "resolvedProvider": "Cloudflare",
@@ -108,7 +108,7 @@
     {
       "id": "kimi-k3",
       "label": "Kimi K3",
-      "series": "choosekit",
+      "series": "openrouter",
       "model": "moonshotai/kimi-k3",
       "provider": "morph",
       "resolvedProvider": "Morph",

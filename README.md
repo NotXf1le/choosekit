@@ -2,7 +2,7 @@
 
 `choosekit` scores a finite set of choices with a language model and returns a typed decision with a probability distribution. It supports local llama.cpp models and an optional OpenRouter backend.
 
-![SuperGPQA direct-choice benchmark](benchmarks/supergpqa-frontier.svg)
+![SuperGPQA direct-choice benchmark](benchmarks/supergpqa-benchmark.svg)
 
 The chart compares accuracy with a lower-is-better cost-latency product. The green line and confidence band show local Qwen3.8 27B Q4_XL accuracy; it has no cloud cost coordinate. [Method and reproduction](benchmarks/README.md#supergpqa)
 
@@ -19,12 +19,17 @@ The chart compares accuracy with a lower-is-better cost-latency product. The gre
 | GLM 5.2 | 44.6% | $0.3932 | 0.69 |
 | Kimi K3 | 59.3% | $0.6243 | 0.73 |
 
-Measured on 2026-09-21 with a fixed OpenRouter provider for each model.
-
 ## Install
+
+Library:
 
 ```sh
 npm install choosekit
+```
+
+MCP server:
+
+```sh
 npm install --global choosekit-mcp
 ```
 
@@ -87,17 +92,11 @@ const choose = fromOpenRouter({
 });
 ```
 
-The OpenRouter backend supports models and providers that return first-token `top_logprobs`, with up to 20 choices. Unlike llama.cpp, this backend sends the prompt to OpenRouter. It requests reasoning to be disabled. Choices omitted from `top_logprobs` receive zero probability. Returned probabilities are normalized across the supplied choices and are not calibrated correctness estimates.
+The OpenRouter backend supports models and providers that return first-token `top_logprobs`, with up to 20 choices. It sends the prompt to OpenRouter and requests reasoning to be disabled.
 
-OpenRouter may route the same model through different providers. Set `provider` to an OpenRouter provider slug to use only that provider and disable fallback:
+Choices omitted from `top_logprobs` receive zero probability. Returned probabilities are normalized across the supplied choices and are not calibrated correctness estimates.
 
-```ts
-const choose = fromOpenRouter({
-  apiKey: process.env.OPENROUTER_API_KEY!,
-  model: "qwen/qwen3.8-27b",
-  provider: process.env.OPENROUTER_PROVIDER!,
-});
-```
+OpenRouter may route the same model through different providers. Set `provider: "provider-slug"` to use only that provider and disable fallback.
 
 ## Scoring modes
 
@@ -109,6 +108,46 @@ const choose = fromOpenRouter({
 In `labels` mode, choices are shown to the model as `A`, `B`, `C` instead of their original keys. For example, `refund: "Issue the refund"` is shown as `"A": "Issue the refund"`. Each description must therefore make the option clear. `choosekit` maps the selected label back to the original key.
 
 `minimal-prefix` walks the token tree until every key is distinguishable. For keys such as `watermelon` and `watermelon juice`, the shared token path is handled once and scoring stops when the paths separate.
+
+## Return value
+
+`choose()` resolves to:
+
+```ts
+{
+  choice,          // selected caller key
+  distribution,    // normalized probability for every supplied key
+  scores,          // backend log-probability score for every key
+  margin,          // largest probability minus the second largest
+  entropy,         // Shannon entropy in nats
+  boundaryTokens,  // prompt tokens rolled back at a tokenization boundary
+  usage,           // backend work, when reported
+}
+```
+
+The result and its nested records are immutable. Each call is stateless. The caller controls action execution, inference retries, and model selection.
+
+## Prompt formatting
+
+`context` is copied unchanged to the start of the scoring prompt. The default formatter then appends the question, choice descriptions, and an answer marker.
+
+Use `formatPrompt` only when you need custom prompt formatting. The result must preserve `context` as an unchanged prefix so an existing server-side prefix cache can still be reused.
+
+## Custom scorer
+
+Use `createChooser` with any backend that can return one comparable conditional log-probability score per candidate:
+
+```ts
+import { createChooser, type Scorer } from "choosekit";
+
+const scorer: Scorer = async ({ prompt, candidates, signal }) => ({
+  logprobs: await scoreCandidateSequences(prompt, candidates, signal),
+});
+
+const choose = createChooser(scorer);
+```
+
+Scores use natural logarithms and must be at most zero.
 
 ## SemIf comparison
 
@@ -126,8 +165,6 @@ Both systems got 139 of 144 cases right, but not the same 139. They share only 2
 These results are specific to this 144-case benchmark, and performance can differ on other decision workloads. Latency is end-to-end. The Qwen server ran on the same machine. Jev was accessed through a hosted API. The timings therefore include different transport overhead. The repository includes an exact copy of SemIf's [`authored144.jsonl`](https://github.com/TheoLeeCJ/SemIf/blob/b9cb32537e78be65f19abfcb1de8fc504b627d84/benchmarks/data/authored144.jsonl), its MIT license, and the [reproduction commands](benchmarks/README.md).
 
 ### Probability examples
-
-Examples from the same benchmark:
 
 [`eafc22c8c40df3932a8e`](benchmarks/data/semif-authored144.jsonl#L112) asks whether the crate is currently in storage. The protocol gives the inventory priority; the current inventory and desk-log entries are missing.
 
@@ -162,46 +199,6 @@ Total variation distance (TVD) compares two complete probability distributions. 
 | Cases with TVD at or below 5% | 64.58% (93/144) |
 | Cases with TVD at or below 10% | 77.08% (111/144) |
 | Cases with TVD above 20% | 14.58% (21/144) |
-
-## Prompt formatting
-
-`context` is copied unchanged to the start of the scoring prompt. The default formatter then appends the question, choice descriptions, and an answer marker.
-
-Use `formatPrompt` only when you need custom prompt formatting. The result must preserve `context` as an unchanged prefix so an existing server-side prefix cache can still be reused.
-
-## Custom scorer
-
-Use `createChooser` with any backend that can return one comparable conditional log-probability score per candidate:
-
-```ts
-import { createChooser, type Scorer } from "choosekit";
-
-const scorer: Scorer = async ({ prompt, candidates, signal }) => ({
-  logprobs: await scoreCandidateSequences(prompt, candidates, signal),
-});
-
-const choose = createChooser(scorer);
-```
-
-Scores use natural logarithms and must be at most zero.
-
-## Result
-
-`choose()` resolves to:
-
-```ts
-{
-  choice,          // selected caller key
-  distribution,    // normalized probability for every supplied key
-  scores,          // backend log-probability score for every key
-  margin,          // largest probability minus the second largest
-  entropy,         // Shannon entropy in nats
-  boundaryTokens,  // prompt tokens rolled back at a tokenization boundary
-  usage,           // backend work, when reported
-}
-```
-
-The result and its nested records are immutable. Each call is stateless. The caller controls action execution, inference retries, and model selection.
 
 ## Requirements
 

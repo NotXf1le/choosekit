@@ -1,10 +1,10 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="920" height="540" viewBox="0 0 920 540" role="img" aria-labelledby="title desc">
-  <title id="title">SuperGPQA frontier: ChooseKit models and Jev</title>
+  <title id="title">SuperGPQA benchmark: ChooseKit models and Jev</title>
   <desc id="desc">Accuracy on the same 1000 proportionally sampled questions. Only OpenRouter models with top_logprobs are included. Lower cost per decision times seconds per decision and higher accuracy are better. Vertical bars show 95 percent Wilson intervals. A horizontal line shows local Qwen3.8 27B Q4_XL accuracy without assigning it a cloud cost coordinate.</desc>
   <rect width="920" height="540" rx="16" fill="#ffffff"/>
   <g font-family="Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif">
     <text x="82" y="31" fill="#111827" font-size="20" font-weight="650">SuperGPQA decision benchmark</text>
-    <text x="82" y="52" fill="#6b7280" font-size="12">proportional sample · 1000 questions · ChooseKit providers pinned · 2026-09-21</text>
+    <text x="82" y="52" fill="#6b7280" font-size="12">proportional sample · 1000 questions · ChooseKit OpenRouter providers pinned · 2026-09-21</text>
     <line x1="548" y1="29" x2="558" y2="29" stroke="#15966b" stroke-width="1.5"/><text x="566" y="33" fill="#4b5563" font-size="11">ChooseKit + llama.cpp</text>
     <circle cx="708" cy="29" r="5" fill="#356ae6"/><text x="720" y="33" fill="#4b5563" font-size="11">ChooseKit + OpenRouter</text>
     <path d="M 874 23 L 880 29 L 874 35 L 868 29 Z" fill="#e85d3f"/><text x="888" y="33" fill="#4b5563" font-size="11">Jev</text>

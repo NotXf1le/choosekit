@@ -7,8 +7,9 @@ export const SUPERGPQA_REVISION = "4430d4458112c7d4497fdcf94d7cc223313d6acf";
 export const SUPERGPQA_SHA256 = "28b998e70205ee95e540317b5adc06a06552a3961fb50b153df126b833f7a910";
 export const SUPERGPQA_PREPARED_SHA256 = "d17a48292cc8f081ca576afc7e8eaa6ca510de59fa9881282922409666bb3aff";
 export const SUPERGPQA_ROWS = 26529;
-export const SUPERGPQA_COMPATIBILITY_SAMPLE_SEED = "choosekit-supergpqa-v1";
+export const SUPERGPQA_PILOT_SAMPLE_SEED = "choosekit-supergpqa-v1";
 export const SUPERGPQA_EVALUATION_SAMPLE_SEED = "choosekit-supergpqa-final-v2";
+export const SUPERGPQA_PILOT_ROWS = 100;
 
 function option(name, fallback) {
   const index = process.argv.indexOf(name);
@@ -25,7 +26,7 @@ function requireText(value, name, id) {
   return value.trim();
 }
 
-function stableRank(value, seed = SUPERGPQA_COMPATIBILITY_SAMPLE_SEED) {
+function stableRank(value, seed = SUPERGPQA_PILOT_SAMPLE_SEED) {
   return createHash("sha256").update(`${seed}\0${value}`).digest("hex");
 }
 
@@ -73,7 +74,7 @@ export function prepareSuperGpqaRows(rows) {
   }));
 }
 
-export function sampleSuperGpqaCompatibilityRows(rows, size) {
+export function sampleSuperGpqaPilotRows(rows, size) {
   if (!Array.isArray(rows)) throw new TypeError("SuperGPQA rows must be an array.");
   if (!Number.isSafeInteger(size) || size < 1 || size > rows.length) {
     throw new TypeError("SuperGPQA sample size must be a positive integer no larger than the dataset.");
@@ -137,18 +138,22 @@ export function sampleSuperGpqaStratifiedRows(
     .sort((a, b) => stableRank(a.id, seed).localeCompare(stableRank(b.id, seed)));
 }
 
-export function sampleSuperGpqaEvaluationRows(rows, size, compatibilitySampleSize = 100) {
+export function sampleSuperGpqaEvaluationRows(
+  rows,
+  size,
+  pilotSampleSize = SUPERGPQA_PILOT_ROWS,
+) {
   if (!Array.isArray(rows)) throw new TypeError("SuperGPQA rows must be an array.");
-  if (!Number.isSafeInteger(compatibilitySampleSize)
-    || compatibilitySampleSize < 1 || compatibilitySampleSize >= rows.length) {
+  if (!Number.isSafeInteger(pilotSampleSize)
+    || pilotSampleSize < 1 || pilotSampleSize >= rows.length) {
     throw new TypeError(
-      "SuperGPQA compatibility sample size must be a positive integer smaller than the dataset.",
+      "SuperGPQA pilot sample size must be a positive integer smaller than the dataset.",
     );
   }
-  const compatibilityIds = new Set(
-    sampleSuperGpqaCompatibilityRows(rows, compatibilitySampleSize).map(({ id }) => id),
+  const pilotIds = new Set(
+    sampleSuperGpqaPilotRows(rows, pilotSampleSize).map(({ id }) => id),
   );
-  const evaluationPool = rows.filter(({ id }) => !compatibilityIds.has(id));
+  const evaluationPool = rows.filter(({ id }) => !pilotIds.has(id));
   return sampleSuperGpqaStratifiedRows(
     evaluationPool,
     size,

@@ -7,11 +7,12 @@ import { fromLlamaCpp } from "../dist/esm/llama-cpp.js";
 import { fromOpenRouter } from "../dist/esm/openrouter.js";
 import {
   SUPERGPQA_REVISION,
-  SUPERGPQA_COMPATIBILITY_SAMPLE_SEED,
+  SUPERGPQA_PILOT_SAMPLE_SEED,
   SUPERGPQA_EVALUATION_SAMPLE_SEED,
+  SUPERGPQA_PILOT_ROWS,
   SUPERGPQA_PREPARED_SHA256,
   SUPERGPQA_ROWS,
-  sampleSuperGpqaCompatibilityRows,
+  sampleSuperGpqaPilotRows,
   sampleSuperGpqaEvaluationRows,
 } from "./prepare-supergpqa.mjs";
 
@@ -72,8 +73,8 @@ function summarize(results, elapsedSeconds) {
 }
 
 const backend = option("--backend", undefined);
-if (backend !== "choosekit" && backend !== "llama-cpp" && backend !== "jev") {
-  throw new TypeError("--backend must be choosekit, llama-cpp, or jev.");
+if (backend !== "openrouter" && backend !== "llama-cpp" && backend !== "jev") {
+  throw new TypeError("--backend must be openrouter, llama-cpp, or jev.");
 }
 const inputPath = option("--input", "benchmarks/.data/supergpqa/supergpqa.jsonl");
 const sampleSizeArgument = option("--sample-size", "100");
@@ -85,7 +86,7 @@ if (sampleMethod !== "balanced" && sampleMethod !== "proportional") {
 const model = backend === "jev"
   ? option("--model", "typesafe/jev-1.13")
   : requireText(option("--model", process.env.OPENROUTER_MODEL), "--model");
-const provider = backend === "choosekit"
+const provider = backend === "openrouter"
   ? requireText(option("--provider", process.env.OPENROUTER_PROVIDER), "--provider")
   : undefined;
 const baseURL = backend === "llama-cpp"
@@ -111,6 +112,9 @@ if (!existsSync(outputPath) && resume) {
 if (!Number.isSafeInteger(sampleSize) || sampleSize < 1) {
   throw new TypeError("--sample-size must be a positive integer.");
 }
+if (sampleMethod === "balanced" && sampleSize > SUPERGPQA_PILOT_ROWS) {
+  throw new TypeError(`--sample-size must not exceed ${SUPERGPQA_PILOT_ROWS} for balanced sampling.`);
+}
 
 const preparedDataset = readFileSync(inputPath);
 const preparedSha256 = createHash("sha256").update(preparedDataset).digest("hex");
@@ -132,7 +136,7 @@ for (const [index, row] of preparedRows.entries()) {
 }
 const selectedRows = sampleMethod === "proportional"
   ? sampleSuperGpqaEvaluationRows(preparedRows, sampleSize)
-  : sampleSuperGpqaCompatibilityRows(preparedRows, sampleSize);
+  : sampleSuperGpqaPilotRows(preparedRows, sampleSize);
 mkdirSync(dirname(outputPath), { recursive: true });
 
 const packageVersion = JSON.parse(
@@ -142,11 +146,11 @@ const sampleMetadata = sampleMethod === "proportional"
   ? {
       method: "proportional-discipline-difficulty",
       seed: SUPERGPQA_EVALUATION_SAMPLE_SEED,
-      excludedCompatibilitySampleSize: 100,
+      excludedPilotSampleSize: SUPERGPQA_PILOT_ROWS,
     }
   : {
       method: "balanced-discipline-difficulty",
-      seed: SUPERGPQA_COMPATIBILITY_SAMPLE_SEED,
+      seed: SUPERGPQA_PILOT_SAMPLE_SEED,
     };
 const benchmarkName = sampleMethod === "proportional"
   ? "SuperGPQA proportional discipline/difficulty sample"
@@ -198,7 +202,7 @@ const fetchWithMetadata = async (...args) => {
   throw new Error("OpenRouter 429 retry limit reached.");
 };
 
-const choose = backend === "choosekit"
+const choose = backend === "openrouter"
   ? fromOpenRouter({ apiKey, model, provider, fetch: fetchWithMetadata })
   : backend === "llama-cpp"
     ? fromLlamaCpp({ baseURL, model, mode: "labels" })
