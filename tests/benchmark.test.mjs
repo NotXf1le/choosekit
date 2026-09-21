@@ -59,7 +59,6 @@ test("llama.cpp benchmark creates its output directory before inference", () => 
   assert.equal(report.summary.errors, 1);
   assert.match(report.results[0].error, /Intentional benchmark test failure/);
   assert.equal(report.runtime.modelChecked, true);
-  assert.equal(report.runtime.resolvedModel, "qwen3.8-27b-text-64k");
 });
 
 test("llama.cpp benchmark refuses a model the server does not serve", () => {
@@ -87,6 +86,25 @@ test("llama.cpp benchmark explains an unreachable model list", () => {
   assert.match(result.stderr, /--skip-model-check/);
 });
 
+test("llama.cpp benchmark rejects unsafe base URLs before model discovery", () => {
+  const output = temporaryPath("qwen.json");
+  const result = run("run-semif.mjs", [
+    "--input", input,
+    "--output", output,
+    "--limit", "1",
+    "--base-url", "http://user:benchmark-secret@127.0.0.1:11434/?token=query-secret",
+  ], {
+    CHOOSEKIT_EXPECT_OUTPUT_PARENT: dirname(output),
+    CHOOSEKIT_MODELS_STATUS: "404",
+  });
+
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr,
+    /TypeError: baseURL must be an HTTP\(S\) URL without credentials, query, or fragment\./);
+  assert.doesNotMatch(result.stderr, /benchmark-secret|query-secret/);
+  assert.throws(() => readFileSync(output));
+});
+
 test("llama.cpp benchmark records an unchecked run as unchecked", () => {
   const output = temporaryPath("qwen.json");
   const result = run("run-semif.mjs", [
@@ -99,7 +117,6 @@ test("llama.cpp benchmark records an unchecked run as unchecked", () => {
   assert.equal(result.status, 0, result.stderr);
   const report = JSON.parse(readFileSync(output, "utf8"));
   assert.equal(report.runtime.modelChecked, false);
-  assert.equal(report.runtime.resolvedModel, null);
 });
 
 test("OpenRouter benchmark creates its output directory before inference", () => {
@@ -116,6 +133,19 @@ test("OpenRouter benchmark creates its output directory before inference", () =>
   assert.equal(report.results.length, 1);
   assert.equal(report.summary.errors, 1);
   assert.match(report.results[0].error, /Intentional benchmark test failure/);
+});
+
+test("SuperGPQA pilot runs are limited to 100 questions", () => {
+  const result = run("run-supergpqa.mjs", [
+    "--backend", "llama-cpp",
+    "--base-url", "http://127.0.0.1:8080",
+    "--model", "test-model",
+    "--sample-method", "balanced",
+    "--sample-size", "101",
+  ]);
+
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /must not exceed 100 for balanced sampling/);
 });
 
 test("comparator creates a nested output for valid reports", () => {

@@ -5,4 +5,5 @@ dist/
 !.env.example
 coverage/
 /docs/
+/benchmarks/.data/
 /benchmarks/results/

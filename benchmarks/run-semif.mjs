@@ -92,6 +92,10 @@ function summarize(results, startedAt) {
 /** llama.cpp serves /v1/models beside /completion; mirror the adapter's base-URL handling. */
 function modelsURL(baseURL) {
   const url = new URL(baseURL);
+  if ((url.protocol !== "http:" && url.protocol !== "https:") || url.username || url.password
+    || url.search || url.hash) {
+    throw new TypeError("baseURL must be an HTTP(S) URL without credentials, query, or fragment.");
+  }
   const path = url.pathname.replace(/\/v1\/?$/, "").replace(/\/$/, "");
   url.pathname = `${path}/v1/models`;
   return url.href;
@@ -128,7 +132,6 @@ async function checkModel(baseURL, model) {
       + " model, so these results would carry a model name that never ran."
       + " Pass --model with one of the ids above, or --skip-model-check to record the run as unverified.");
   }
-  return model;
 }
 
 const input = option("--input", "benchmarks/data/semif-authored144.jsonl");
@@ -136,7 +139,7 @@ const mode = option("--mode", "labels");
 if (mode !== "labels" && mode !== "minimal-prefix") {
   throw new TypeError("--mode must be labels or minimal-prefix.");
 }
-const output = option("--output", `benchmarks/results/semif-qwen3.8-27b-production-${mode}.json`);
+const output = option("--output", `benchmarks/results/semif-qwen3.8-27b-${mode}.json`);
 const baseURL = option("--base-url", process.env.LLAMA_CPP_BASE_URL
   ?? "http://127.0.0.1:11434/");
 const model = option("--model", process.env.LLAMA_CPP_MODEL ?? "qwen3.8-27b-text-64k");
@@ -154,9 +157,11 @@ const allRows = source.toString("utf8").trim().split(/\r?\n/).map((line) => JSON
 if (allRows.length !== 144) throw new Error(`Expected 144 SemIf rows, received ${allRows.length}.`);
 const rows = limit === undefined ? allRows : allRows.slice(0, limit);
 mkdirSync(dirname(output), { recursive: true });
-const resolvedModel = skipModelCheck ? null : await checkModel(baseURL, model);
 if (skipModelCheck) console.warn("--skip-model-check: the recorded model is the one requested, unconfirmed.");
-else console.log(`Model confirmed by the server: ${resolvedModel}`);
+else {
+  await checkModel(baseURL, model);
+  console.log(`Model ID confirmed in the server catalog: ${model}`);
+}
 const choose = fromLlamaCpp({ baseURL, model, mode });
 const results = [];
 const startedAt = performance.now();
@@ -221,7 +226,6 @@ for (let index = 0; index < rows.length; index++) {
     runtime: {
       baseURL,
       model,
-      resolvedModel,
       modelChecked: !skipModelCheck,
       mode,
       adapter: "choosekit/llama-cpp",
