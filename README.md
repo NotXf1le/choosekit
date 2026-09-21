@@ -2,8 +2,30 @@
 
 `choosekit` scores a finite set of choices with a language model and returns a typed decision with a probability distribution. It supports local llama.cpp models and an optional OpenRouter backend.
 
+![SuperGPQA direct-choice benchmark](benchmarks/supergpqa-frontier.svg)
+
+The chart compares accuracy with a lower-is-better cost-latency product. The green line and confidence band show local Qwen3.8 27B Q4_XL accuracy; it has no cloud cost coordinate. [Method and reproduction](benchmarks/README.md#supergpqa)
+
+| Model | Accuracy | Cost / 1,000 decisions | Decisions/s |
+|---|---:|---:|---:|
+| Granite 4.0 H Micro | 19.3% | $0.0053 | 2.84 |
+| Llama 3.1 8B | 19.0% | $0.0061 | 1.33 |
+| GLM 4.7 Flash | 25.7% | $0.0172 | 1.18 |
+| Gemma 4 26B | 37.6% | $0.0184 | 2.19 |
+| Jev 1.13 | 53.6% | $0.0244 | 2.86 |
+| Granite 4.2 8B | 23.8% | $0.0293 | 3.15 |
+| DeepSeek V4.1 Flash | 45.6% | $0.0544 | 1.40 |
+| DeepSeek V4 Pro | 43.2% | $0.3588 | 0.88 |
+| GLM 5.2 | 44.6% | $0.3932 | 0.69 |
+| Kimi K3 | 59.3% | $0.6243 | 0.73 |
+
+Measured on 2026-09-21 with a fixed OpenRouter provider for each model.
+
+## Install
+
 ```sh
 npm install choosekit
+npm install --global choosekit-mcp
 ```
 
 ## Why
@@ -18,13 +40,13 @@ Agents often need to choose from known options:
 
 `choosekit` scores choices using the model's conditional log probabilities at the token branches that distinguish them.
 
-The project was inspired by [Jev and the System One model interface](https://typesafe.ai/blog/introducing-system-one-models-and-jev): application state in, typed probabilistic decisions out. Jev is a specialized hosted model. `choosekit` explores the same useful interface with a model you control. The llama.cpp backend keeps application state on infrastructure you choose; OpenRouter is available when a hosted model is more convenient.
+The project was inspired by [Jev and the System One model interface](https://typesafe.ai/blog/introducing-system-one-models-and-jev): application state in, typed probabilistic decisions out. Jev is a specialized hosted model. `choosekit` brings the same typed decision interface to general-purpose language models. The llama.cpp backend runs on infrastructure you choose; OpenRouter provides hosted inference.
 
 `choosekit` is an independent project with no affiliation to TypeSafe or Jev.
 
 ## MCP server
 
-[`choosekit-mcp`](packages/choosekit-mcp/README.md) exposes choosekit through llama.cpp or OpenRouter as a read-only stdio tool for Claude Code, Codex, and OpenCode. Select the backend and configure it with environment variables when starting the MCP server. Every `choose` call uses this configuration.
+[`choosekit-mcp`](packages/choosekit-mcp/README.md) exposes choosekit through llama.cpp or OpenRouter as a read-only stdio tool for Claude Code, Codex, and OpenCode. Select the backend and configure it with environment variables when starting the MCP server.
 
 ## llama.cpp
 
@@ -88,14 +110,13 @@ In `labels` mode, choices are shown to the model as `A`, `B`, `C` instead of the
 
 `minimal-prefix` walks the token tree until every key is distinguishable. For keys such as `watermelon` and `watermelon juice`, the shared token path is handled once and scoring stops when the paths separate.
 
-## Benchmark
+## SemIf comparison
 
 The local adapter was compared with `typesafe/jev-1.13` on SemIf's official 144-row `authored144` benchmark, which covers evidence interpretation, rule application, and candidate selection. The local model was **Qwen 3.8 27B Q4_XL** served by llama.cpp on an **NVIDIA RTX 4090**. The Qwen run used the default A/B/C mode. The model was already loaded, and requests were sent one at a time to a llama.cpp server on the same machine.
 
 | Metric | Qwen 3.8 27B Q4_XL + choosekit | Jev 1.13 |
 |---|---:|---:|
 | Accuracy | 96.53% (139/144) | 96.53% (139/144) |
-| Average balanced accuracy across task families | 96.01% | 95.56% |
 | Median latency (p50) | 239 ms | 368 ms |
 | 95th percentile latency (p95) | 286 ms | 546 ms |
 | Throughput | 4.02 decisions/s | 2.43 decisions/s |
@@ -124,7 +145,7 @@ Examples from the same benchmark:
 | **Insufficient evidence (selected by both)** | **97.605%** | **99.000%** |
 | Contradicted | 0.029% | 1.000% |
 
-The Qwen + llama.cpp probabilities shown here are [uncalibrated](https://proceedings.mlr.press/v70/guo17a.html). [Jev is trained for calibrated decisions](https://typesafe.ai/blog/introducing-system-one-models-and-jev). The distributions look similar in these examples. This benchmark measures accuracy, latency, and distribution similarity.
+The Qwen + llama.cpp probabilities shown here are [uncalibrated](https://proceedings.mlr.press/v70/guo17a.html). [Jev is trained for calibrated decisions](https://typesafe.ai/blog/introducing-system-one-models-and-jev). The distributions look similar in these examples.
 
 ### Distribution comparison
 
@@ -141,8 +162,6 @@ Total variation distance (TVD) compares two complete probability distributions. 
 | Cases with TVD at or below 5% | 64.58% (93/144) |
 | Cases with TVD at or below 10% | 77.08% (111/144) |
 | Cases with TVD above 20% | 14.58% (21/144) |
-
-Most distributions are similar. Some differ substantially: the systems select different choices in eight cases, and the largest TVD is 94.23%.
 
 ## Prompt formatting
 
@@ -187,6 +206,6 @@ The result and its nested records are immutable. Each call is stateless. The cal
 ## Requirements
 
 - Node.js 20 or newer.
-- No runtime dependencies, model downloads, installation hooks, or bundled inference servers.
+- The `choosekit` package has no runtime dependencies, model downloads, installation hooks, or bundled inference servers.
 
 [Apache-2.0](LICENSE). Copyright 2026 NotXf1le.

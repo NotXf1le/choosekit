@@ -1,0 +1,143 @@
+{
+  "dataset": {
+    "rows": 1000,
+    "sha256": "d17a48292cc8f081ca576afc7e8eaa6ca510de59fa9881282922409666bb3aff",
+    "randomBaseline": 0.1051944444444431,
+    "sample": "proportional-discipline-difficulty"
+  },
+  "runs": [
+    {
+      "id": "granite-4.0-h-micro",
+      "label": "Granite 4.0 H Micro",
+      "series": "choosekit",
+      "model": "ibm-granite/granite-4.0-h-micro",
+      "provider": "cloudflare",
+      "resolvedProvider": "Cloudflare",
+      "correct": 193,
+      "totalCostUsd": 0.005256013000000002,
+      "medianLatencyMs": 316.5877500000206,
+      "decisionsPerSecond": 2.843996339426331
+    },
+    {
+      "id": "llama-3.1-8b",
+      "label": "Llama 3.1 8B",
+      "series": "choosekit",
+      "model": "meta-llama/llama-3.1-8b-instruct",
+      "provider": "novita",
+      "resolvedProvider": "Novita",
+      "labelDy": 27,
+      "correct": 190,
+      "totalCostUsd": 0.006144179999999994,
+      "medianLatencyMs": 625.0682000000379,
+      "decisionsPerSecond": 1.3287550260398036
+    },
+    {
+      "id": "glm-4.7-flash",
+      "label": "GLM 4.7 Flash",
+      "series": "choosekit",
+      "model": "z-ai/glm-4.7-flash",
+      "provider": "cloudflare",
+      "resolvedProvider": "Cloudflare",
+      "correct": 257,
+      "totalCostUsd": 0.017208291499999993,
+      "medianLatencyMs": 261.28954999995767,
+      "decisionsPerSecond": 1.1753601925513055
+    },
+    {
+      "id": "glm-5.2",
+      "label": "GLM 5.2",
+      "series": "choosekit",
+      "model": "z-ai/glm-5.2",
+      "provider": "cloudflare",
+      "resolvedProvider": "Cloudflare",
+      "correct": 446,
+      "totalCostUsd": 0.39322003999999994,
+      "medianLatencyMs": 1068.5187000000028,
+      "decisionsPerSecond": 0.69116943608323
+    },
+    {
+      "id": "gemma-4-26b",
+      "label": "Gemma 4 26B",
+      "series": "choosekit",
+      "model": "google/gemma-4-26b-a4b-it",
+      "provider": "dekallm",
+      "resolvedProvider": "DekaLLM",
+      "correct": 376,
+      "totalCostUsd": 0.0184062,
+      "medianLatencyMs": 384.1862999999921,
+      "decisionsPerSecond": 2.1881737925945197
+    },
+    {
+      "id": "granite-4.2-8b",
+      "label": "Granite 4.2 8B",
+      "series": "choosekit",
+      "model": "ibm-granite/granite-4.2-8b",
+      "provider": "coreweave",
+      "resolvedProvider": "CoreWeave",
+      "labelDy": 22,
+      "correct": 238,
+      "totalCostUsd": 0.029343299999999975,
+      "medianLatencyMs": 290.28174999999464,
+      "decisionsPerSecond": 3.1536941543271486
+    },
+    {
+      "id": "deepseek-v4.1-flash",
+      "label": "DeepSeek V4.1 Flash",
+      "series": "choosekit",
+      "model": "deepseek/deepseek-v4.1-flash",
+      "provider": "wafer",
+      "resolvedProvider": "Wafer",
+      "correct": 456,
+      "totalCostUsd": 0.054357200000000015,
+      "medianLatencyMs": 641.0851999999941,
+      "decisionsPerSecond": 1.3966703323131509
+    },
+    {
+      "id": "deepseek-v4-pro",
+      "label": "DeepSeek V4 Pro",
+      "series": "choosekit",
+      "model": "deepseek/deepseek-v4-pro-0813",
+      "provider": "cloudflare",
+      "resolvedProvider": "Cloudflare",
+      "labelDy": 27,
+      "correct": 432,
+      "totalCostUsd": 0.35875751999999944,
+      "medianLatencyMs": 787.4300499999663,
+      "decisionsPerSecond": 0.8806034365130117
+    },
+    {
+      "id": "kimi-k3",
+      "label": "Kimi K3",
+      "series": "choosekit",
+      "model": "moonshotai/kimi-k3",
+      "provider": "morph",
+      "resolvedProvider": "Morph",
+      "labelDx": -10,
+      "labelAnchor": "end",
+      "correct": 593,
+      "totalCostUsd": 0.6242506249999994,
+      "medianLatencyMs": 1296.1853999999585,
+      "decisionsPerSecond": 0.7251960952904043
+    },
+    {
+      "id": "jev-1.13",
+      "label": "Jev 1.13",
+      "series": "jev",
+      "model": "typesafe/jev-1.13",
+      "correct": 536,
+      "totalCostUsd": 0.024364368000000036,
+      "medianLatencyMs": 325.2531000000017,
+      "decisionsPerSecond": 2.8591025350335553
+    }
+  ],
+  "localReference": {
+    "id": "qwen3.8-27b-local",
+    "label": "Local Qwen3.8 27B Q4_XL",
+    "series": "llama-cpp",
+    "model": "qwen3.8-27b-text-64k",
+    "correct": 400,
+    "totalCostUsd": 0,
+    "medianLatencyMs": 555.8330999999889,
+    "decisionsPerSecond": 1.342476004288219
+  }
+}
