@@ -226,7 +226,7 @@ for (let index = 0; index < rows.length; index++) {
       modelChecked: !skipModelCheck,
       mode,
       adapter: "choosekit/llama-cpp",
-      packageVersion: "0.5.0",
+      packageVersion: "0.6.0",
     },
     interpretation: mode === "labels"
       ? "Package A/B/C label prompt and distinguishing-token likelihoods."
