@@ -128,6 +128,25 @@ test("pins an optional provider without fallback", async () => {
   });
 });
 
+test("sends image inputs as OpenRouter content parts", async () => {
+  const f = fixture();
+  await chooser(f)({
+    ...request,
+    images: [
+      { mediaType: "image/png", base64: "cG5n" },
+      { mediaType: "image/jpeg", base64: "anBlZw==" },
+    ],
+  });
+
+  const content = f.calls[0].body.messages[0].content;
+  assert.equal(content[0].type, "text");
+  assert.ok(content[0].text.startsWith(request.context));
+  assert.deepEqual(content.slice(1), [
+    { type: "image_url", image_url: { url: "data:image/png;base64,cG5n" } },
+    { type: "image_url", image_url: { url: "data:image/jpeg;base64,anBlZw==" } },
+  ]);
+});
+
 test("assigns zero probability to labels omitted from top logprobs", async () => {
   const f = fixture(response(unorderedTopLogprobs.filter(({ token }) => token !== "C")));
   const decision = await chooser(f)(request);

@@ -97,6 +97,17 @@ test("normalizes an explicit API base URL", async () => {
   assert.equal(f.calls[0].url, "https://example.test/ollama/api/chat");
 });
 
+test("sends raw base64 image data to Ollama", async () => {
+  const f = fixture();
+  await chooser(f)({
+    ...request,
+    images: [{ mediaType: "image/webp", base64: "d2VicA==" }],
+  });
+
+  assert.deepEqual(f.calls[0].body.messages[0].images, ["d2VicA=="]);
+  assert.ok(f.calls[0].body.messages[0].content.startsWith(request.context));
+});
+
 test("rejects invalid configuration before sending a request", () => {
   const f = fixture();
   assert.throws(() => fromOllama({ model: "", fetch: f.fetch }), /model/i);

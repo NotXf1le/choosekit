@@ -59,6 +59,24 @@ test("scores one complete escaped and terminated key per candidate", async () =>
   assert.equal(called, 1);
 });
 
+test("snapshots image inputs before an asynchronous boundary", async () => {
+  let release;
+  const gate = new Promise((resolve) => { release = resolve; });
+  const image = { mediaType: "image/png", base64: "aW1hZ2U=" };
+  const images = [image];
+  const choose = createChooser(({ images }) => {
+    assert.deepEqual(images, [{ mediaType: "image/png", base64: "aW1hZ2U=" }]);
+    return { logprobs: [-1, -2, -3] };
+  }, {
+    formatPrompt: async ({ context, instruction }) => { await gate; return context + instruction; },
+  });
+  const pending = choose({ ...request, images });
+  image.base64 = "Y2hhbmdlZA==";
+  images.push({ mediaType: "image/jpeg", base64: "YWRkZWQ=" });
+  release();
+  await pending;
+});
+
 test("empty context is supported", async () => {
   const d = await fixed([-1, -2, -3])({ ...request, context: "" });
   assert.equal(d.choice, "edit");
@@ -105,6 +123,9 @@ for (const [name, change] of [
   ["blank description", { choices: { a: " ", b: "B" } }],
   ["numeric description", { choices: { a: 1, b: "B" } }],
   ["symbol key", { choices: { a: "A", b: "B", [Symbol("c")]: "C" } }],
+  ["non-array images", { images: {} }],
+  ["unsupported image type", { images: [{ mediaType: "image/bmp", base64: "YQ==" }] }],
+  ["empty image data", { images: [{ mediaType: "image/png", base64: "" }] }],
 ]) {
   test(`rejects ${name} before invoking the scorer`, async () => {
     let called = false;

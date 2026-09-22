@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Added image inputs for vision-capable llama.cpp, Ollama, and OpenRouter models.
+  llama.cpp image scoring uses `labels` mode.
 - Added labels-only Ollama scoring with up to 20 choices through `choosekit/ollama`.
 - Added an exact `/v1/models` check to the SemIf llama.cpp benchmark, with
   `--skip-model-check` for unverified runs.

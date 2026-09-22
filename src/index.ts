@@ -3,7 +3,7 @@ import type { Chooser, ChooserOptions, Scorer } from "./types.js";
 
 export type {
   Choices, ChoiceKey, ChoiceRequest, Chooser, ChooserOptions, Decision,
-  ScoreRequest, Scorer, Scores, Usage, PromptInput,
+  ImageInput, ImageMediaType, ScoreRequest, Scorer, Scores, Usage, PromptInput,
 } from "./types.js";
 export { ScoringError } from "./validation.js";
 
