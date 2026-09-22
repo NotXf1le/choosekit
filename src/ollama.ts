@@ -130,13 +130,19 @@ export function fromOllama(options: OllamaOptions): Chooser {
   if (typeof fetchImpl !== "function") throw new TypeError("A fetch implementation is required.");
   const url = endpoint(options.baseURL);
 
-  const score: Scorer = async ({ prompt, candidates, signal }) => {
+  const score: Scorer = async ({ prompt, candidates, images, signal }) => {
     if (candidates.length > MAX_CANDIDATES) {
       throw new TypeError(`Ollama supports at most ${MAX_CANDIDATES} choices.`);
     }
     const response = await post(fetchImpl, url, {
       model,
-      messages: [{ role: "user", content: prompt }],
+      messages: [{
+        role: "user",
+        content: prompt,
+        ...(images === undefined || images.length === 0
+          ? {}
+          : { images: images.map(({ base64 }) => base64) }),
+      }],
       stream: false,
       think: false,
       logprobs: true,

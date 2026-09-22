@@ -1,11 +1,20 @@
 export type Choices = Readonly<Record<string, string>>;
 export type ChoiceKey<C extends Choices> = `${Extract<keyof C, string | number>}`;
 
+export type ImageMediaType = "image/png" | "image/jpeg" | "image/webp";
+
+export interface ImageInput {
+  readonly mediaType: ImageMediaType;
+  /** Raw base64 data without a data URL prefix. */
+  readonly base64: string;
+}
+
 export interface ChoiceRequest<C extends Choices> {
   /** Existing context, copied unchanged to the beginning of the scoring prompt. */
   readonly context: string;
   readonly question: string;
   readonly choices: C;
+  readonly images?: readonly ImageInput[];
   readonly signal?: AbortSignal;
 }
 
@@ -35,6 +44,7 @@ export interface Decision<K extends string> {
 export interface ScoreRequest {
   readonly prompt: string;
   readonly candidates: readonly string[];
+  readonly images?: readonly ImageInput[];
   readonly signal?: AbortSignal;
 }
 

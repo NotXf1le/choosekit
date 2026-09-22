@@ -1,6 +1,6 @@
 # choosekit
 
-`choosekit` scores a finite set of choices with a language model and returns a typed decision with a probability distribution. It supports local models through llama.cpp and Ollama, plus an optional OpenRouter backend.
+`choosekit` scores a finite set of choices and returns a typed decision with a probability distribution. It accepts `text and images` through llama.cpp, Ollama, and OpenRouter.
 
 ![SuperGPQA direct-choice benchmark](benchmarks/supergpqa-benchmark.svg)
 
@@ -107,6 +107,29 @@ The OpenRouter backend supports models and providers that return first-token `to
 Returned probabilities are normalized across the supplied choices and are not calibrated correctness estimates.
 
 OpenRouter may route the same model through different providers. Set `provider: "provider-slug"` to use only that provider and disable fallback.
+
+## Image inputs
+
+llama.cpp, Ollama, and OpenRouter can score choices from images when the selected model supports vision. Pass raw base64 data with its media type:
+
+```ts
+import { readFile } from "node:fs/promises";
+
+const decision = await choose({
+  context: "Inspect the attached screenshot.",
+  question: "Which state is the interface in?",
+  choices: {
+    ready: "The interface is ready for input.",
+    loading: "The interface is still loading.",
+  },
+  images: [{
+    mediaType: "image/png",
+    base64: (await readFile("screenshot.png")).toString("base64"),
+  }],
+});
+```
+
+Supported media types are PNG, JPEG, and WebP. llama.cpp image inputs currently support `labels` mode only.
 
 ## Scoring modes
 

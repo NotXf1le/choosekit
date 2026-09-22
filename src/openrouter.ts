@@ -154,13 +154,22 @@ export function fromOpenRouter(options: OpenRouterOptions): Chooser {
   const fetchImpl = options.fetch ?? globalThis.fetch;
   if (typeof fetchImpl !== "function") throw new TypeError("A fetch implementation is required.");
 
-  const score: Scorer = async ({ prompt, candidates, signal }) => {
+  const score: Scorer = async ({ prompt, candidates, images, signal }) => {
     if (candidates.length > MAX_CANDIDATES) {
       throw new TypeError(`OpenRouter supports at most ${MAX_CANDIDATES} choices.`);
     }
     const response = await post(fetchImpl, apiKey, {
       model,
-      messages: [{ role: "user", content: prompt }],
+      messages: [{
+        role: "user",
+        content: images === undefined || images.length === 0 ? prompt : [
+          { type: "text", text: prompt },
+          ...images.map(({ mediaType, base64 }) => ({
+            type: "image_url",
+            image_url: { url: `data:${mediaType};base64,${base64}` },
+          })),
+        ],
+      }],
       max_tokens: 1,
       stream: false,
       temperature: 1,

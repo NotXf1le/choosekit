@@ -1,11 +1,28 @@
 import type {
-  Choices, ChoiceKey, ChoiceRequest, Chooser, ChooserOptions, Decision, Scorer, Usage,
+  Choices, ChoiceKey, ChoiceRequest, Chooser, ChooserOptions, Decision, ImageInput, Scorer, Usage,
 } from "./types.js";
 import { isCount, isLogprob, isRecord, requireText, ScoringError } from "./validation.js";
 
 export type CandidateFormat = "keys" | "labels";
 
 const LABELS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+const IMAGE_MEDIA_TYPES = new Set(["image/png", "image/jpeg", "image/webp"]);
+
+function snapshotImages(value: unknown): readonly ImageInput[] | undefined {
+  if (value === undefined) return undefined;
+  if (!Array.isArray(value)) throw new TypeError("images must be an array.");
+  return Object.freeze(value.map((image, index) => {
+    if (!isRecord(image)) throw new TypeError(`images[${index}] must be an object.`);
+    if (!IMAGE_MEDIA_TYPES.has(image.mediaType as string)) {
+      throw new TypeError(`images[${index}].mediaType is not supported.`);
+    }
+    requireText(image.base64, `images[${index}].base64`);
+    return Object.freeze({
+      mediaType: image.mediaType as ImageInput["mediaType"],
+      base64: image.base64,
+    });
+  }));
+}
 
 function snapshot(choices: unknown): [string, string][] {
   if (!isRecord(choices) || Object.getOwnPropertySymbols(choices).length !== 0) {
@@ -109,6 +126,7 @@ export function createFormattedChooser(score: Scorer, options: ChooserOptions,
     if (typeof context !== "string") throw new TypeError("context must be a string.");
     requireText(question, "question");
     const entries = snapshot(choices);
+    const images = snapshotImages(request.images);
     const keys = entries.map(([key]) => key) as ChoiceKey<C>[];
     const prepared = instruction(question, entries, candidateFormat);
     const prompt = formatPrompt
@@ -122,7 +140,9 @@ export function createFormattedChooser(score: Scorer, options: ChooserOptions,
     }
     signal?.throwIfAborted();
     const scored = await score(Object.freeze({
-      prompt, candidates: prepared.candidates, ...(signal ? { signal } : {}),
+      prompt, candidates: prepared.candidates,
+      ...(images === undefined ? {} : { images }),
+      ...(signal ? { signal } : {}),
     }));
     signal?.throwIfAborted();
     if (!isRecord(scored) || !Array.isArray(scored.logprobs)

@@ -1,4 +1,4 @@
-import { createChooser, type Scorer, type Decision } from "choosekit";
+import { createChooser, type Scorer, type Decision, type ImageInput } from "choosekit";
 import { fromLlamaCpp } from "choosekit/llama-cpp";
 import { fromOllama } from "choosekit/ollama";
 import { fromOpenRouter } from "choosekit/openrouter";
@@ -35,7 +35,11 @@ void local({ context: "", question: "?", choices: { yes: "Yes", no: "No" } });
 const ollama = fromOllama({ model: "test-model" });
 void ollama({ context: "", question: "?", choices: { yes: "Yes", no: "No" } });
 const remote = fromOpenRouter({ apiKey: "test-key", model: "test/model" });
-void remote({ context: "", question: "?", choices: { yes: "Yes", no: "No" } });
+const image: ImageInput = { mediaType: "image/png", base64: "aW1hZ2U=" };
+void remote({ context: "", question: "?", choices: { yes: "Yes", no: "No" }, images: [image] });
+void ollama({ context: "", question: "?", choices: { yes: "Yes", no: "No" }, images: [image] });
+// @ts-expect-error Image MIME types are restricted to supported formats.
+void remote({ context: "", question: "?", choices: { yes: "Yes", no: "No" }, images: [{ mediaType: "image/bmp", base64: "YQ==" }] });
 
 // @ts-expect-error The old implicit agent-state input is not part of this API.
 choose({ state: "Changed", question: "Next?", choices: { yes: "Yes", no: "No" } });

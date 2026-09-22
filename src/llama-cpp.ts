@@ -12,13 +12,19 @@ export interface LlamaCppOptions extends ChooserOptions {
   readonly model?: string;
   readonly headers?: Readonly<Record<string, string>>;
   readonly fetch?: typeof globalThis.fetch;
-  /** Must match the agent's tokenizer setting. Defaults to false for serialized context. */
+  /** Controls add_special for llama.cpp tokenization. Defaults to false; image inputs require false. */
   readonly addSpecialTokens?: boolean;
 }
 
 interface Endpoints {
   readonly tokenize: string;
+  readonly detokenize: string;
   readonly completion: string;
+  readonly props: string;
+}
+
+interface ImageSupport {
+  readonly marker: string;
 }
 
 interface Probe {
@@ -36,7 +42,7 @@ interface Branch {
   readonly score: number;
 }
 
-function endpoints(baseURL: string): Endpoints {
+function endpoints(baseURL: string, model?: string): Endpoints {
   requireText(baseURL, "baseURL");
   const url = new URL(baseURL);
   if ((url.protocol !== "http:" && url.protocol !== "https:") || url.username || url.password
@@ -46,8 +52,13 @@ function endpoints(baseURL: string): Endpoints {
   const path = url.pathname.replace(/\/v1\/?$/, "").replace(/\/$/, "");
   url.pathname = `${path}/tokenize`;
   const tokenize = url.href;
+  url.pathname = `${path}/detokenize`;
+  const detokenize = url.href;
   url.pathname = `${path}/completion`;
-  return { tokenize, completion: url.href };
+  const completion = url.href;
+  url.pathname = `${path}/props`;
+  if (model !== undefined) url.searchParams.set("model", model);
+  return { tokenize, detokenize, completion, props: url.href };
 }
 
 function requestHeaders(value: unknown): Readonly<Record<string, string>> {
@@ -91,12 +102,54 @@ async function post(fetchImpl: typeof globalThis.fetch, url: string,
   }
 }
 
+async function get(fetchImpl: typeof globalThis.fetch, url: string,
+  headers: Readonly<Record<string, string>>, signal?: AbortSignal): Promise<unknown> {
+  signal?.throwIfAborted();
+  let response: Response;
+  try {
+    response = await fetchImpl(url, { method: "GET", headers, ...(signal ? { signal } : {}) });
+  } catch (error) {
+    signal?.throwIfAborted();
+    throw error;
+  }
+  signal?.throwIfAborted();
+  if (!response.ok) {
+    throw new ScoringError(`llama.cpp returned HTTP ${response.status} for ${new URL(url).pathname}.`);
+  }
+  try {
+    const value: unknown = await response.json();
+    signal?.throwIfAborted();
+    return value;
+  } catch {
+    signal?.throwIfAborted();
+    throw new ScoringError(`llama.cpp returned invalid JSON for ${new URL(url).pathname}.`);
+  }
+}
+
 function parseTokenization(value: unknown): number[] {
   if (!isRecord(value)) throw new ScoringError("llama.cpp returned an invalid tokenization.");
   return tokenIds(value.tokens);
 }
 
-function parseProbe(value: unknown, prompt: readonly number[], targetTokenId: number): Probe {
+function parseDetokenization(value: unknown): string {
+  if (!isRecord(value) || typeof value.content !== "string") {
+    throw new ScoringError("llama.cpp returned an invalid detokenization.");
+  }
+  return value.content;
+}
+
+function parseImageSupport(value: unknown): ImageSupport {
+  if (!isRecord(value) || !isRecord(value.modalities) || value.modalities.vision !== true) {
+    throw new ScoringError("llama.cpp does not advertise vision support for this model.");
+  }
+  if (typeof value.media_marker !== "string" || value.media_marker.length === 0) {
+    throw new ScoringError("llama.cpp did not return a multimodal media marker.");
+  }
+  return Object.freeze({ marker: value.media_marker });
+}
+
+function parseProbe(value: unknown, expectedPromptTokens: number | null,
+  targetTokenId: number): Probe {
   if (!isRecord(value)) throw new ScoringError("llama.cpp returned an invalid completion.");
   if (value.truncated === true) {
     throw new ScoringError("llama.cpp truncated the token prefix while scoring a candidate.");
@@ -144,7 +197,10 @@ function parseProbe(value: unknown, prompt: readonly number[], targetTokenId: nu
   }
 
   const promptTokens: unknown = value.tokens_evaluated;
-  if (!isCount(promptTokens) || promptTokens !== prompt.length) {
+  if (!isCount(promptTokens)) {
+    throw new ScoringError("llama.cpp returned invalid prompt-token usage.");
+  }
+  if (expectedPromptTokens !== null && promptTokens !== expectedPromptTokens) {
     throw new ScoringError("llama.cpp did not evaluate the supplied numeric token prefix as sent.");
   }
   let completionTokens = output.length;
@@ -178,11 +234,20 @@ export function fromLlamaCpp(options: LlamaCppOptions): Chooser {
   }
   const fetchImpl = options.fetch ?? globalThis.fetch;
   if (typeof fetchImpl !== "function") throw new TypeError("A fetch implementation is required.");
-  const urls = endpoints(baseURL);
+  const urls = endpoints(baseURL, model);
   const headers = requestHeaders(options.headers);
-
-  const score: Scorer = async ({ prompt, candidates, signal }) => {
+  const score: Scorer = async ({ prompt, candidates, images, signal }) => {
+    const hasImages = images !== undefined && images.length > 0;
+    if (hasImages && mode !== "labels") {
+      throw new TypeError("llama.cpp image inputs require labels mode.");
+    }
+    if (hasImages && addSpecialTokens) {
+      throw new TypeError("llama.cpp image inputs require addSpecialTokens to be false.");
+    }
     signal?.throwIfAborted();
+    const imageSupport = hasImages
+      ? parseImageSupport(await get(fetchImpl, urls.props, headers, signal))
+      : undefined;
     const encoded: number[][] = [];
     for (const content of [prompt, ...candidates.map((candidate) => prompt + candidate)]) {
       const response = await post(fetchImpl, urls.tokenize, headers, {
@@ -199,7 +264,7 @@ export function fromLlamaCpp(options: LlamaCppOptions): Chooser {
     let promptTokens = 0;
     let cachedTokens: number | null = 0;
     let completionTokens = 0;
-    let requests = encoded.length;
+    let requests = encoded.length + (hasImages ? 1 : 0);
 
     let root = treeRoot;
     const rootSuffix: number[] = [];
@@ -209,6 +274,33 @@ export function fromLlamaCpp(options: LlamaCppOptions): Chooser {
       rootSuffix.push(first[0]);
       root = first[1];
     }
+    const materializeImagePrompt = async (numericPrefix: readonly number[]) => {
+      const response = await post(fetchImpl, urls.detokenize, headers, {
+        tokens: numericPrefix, ...(model === undefined ? {} : { model }),
+      }, signal);
+      requests++;
+      const detokenized = parseDetokenization(response);
+      if (detokenized.includes(imageSupport!.marker)) {
+        throw new ScoringError("The formatted prompt contains llama.cpp's multimodal media marker.");
+      }
+
+      const roundTripResponse = await post(fetchImpl, urls.tokenize, headers, {
+        content: detokenized, add_special: false,
+        ...(model === undefined ? {} : { model }),
+      }, signal);
+      requests++;
+      const roundTrip = parseTokenization(roundTripResponse);
+      if (roundTrip.length !== numericPrefix.length
+        || roundTrip.some((tokenId, index) => tokenId !== numericPrefix[index])) {
+        throw new ScoringError("llama.cpp could not preserve the image prompt token prefix.");
+      }
+
+      const value = Object.freeze({
+        prompt_string: `${images!.map(() => imageSupport!.marker).join("\n")}\n${detokenized}`,
+        multimodal_data: Object.freeze(images!.map(({ base64 }) => base64)),
+      });
+      return value;
+    };
 
     const work: Branch[] = [{
       node: root, indices: candidates.map((_, index) => index), suffix: rootSuffix, score: 0,
@@ -229,12 +321,13 @@ export function fromLlamaCpp(options: LlamaCppOptions): Chooser {
       const children = [...branch.node.children];
       const siblingLogprobs = new Map<number, number>();
       const numericPrefix = [...base, ...branch.suffix];
+      const promptValue = hasImages ? await materializeImagePrompt(numericPrefix) : numericPrefix;
       for (const [targetTokenId] of children) {
         if (siblingLogprobs.has(targetTokenId)) continue;
         const collectSiblings = siblingLogprobs.size === 0 && children.length > 1;
         signal?.throwIfAborted();
         const response = await post(fetchImpl, urls.completion, headers, {
-          prompt: numericPrefix,
+          prompt: promptValue,
           ...(model === undefined ? {} : { model }),
           n_predict: 1,
           n_probs: collectSiblings ? 64 : 1,
@@ -249,7 +342,7 @@ export function fromLlamaCpp(options: LlamaCppOptions): Chooser {
           cache_prompt: true,
         }, signal);
         signal?.throwIfAborted();
-        const probe = parseProbe(response, numericPrefix, targetTokenId);
+        const probe = parseProbe(response, hasImages ? null : numericPrefix.length, targetTokenId);
         promptTokens += probe.promptTokens;
         cachedTokens = cachedTokens === null || probe.cachedTokens === null
           ? null : cachedTokens + probe.cachedTokens;
