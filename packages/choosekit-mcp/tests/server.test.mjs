@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { InMemoryTransport } from "@modelcontextprotocol/server";
 import { createChooser, ScoringError } from "choosekit";
+import { ImageLoadError } from "../dist/images.js";
 import { buildServer } from "../dist/server.js";
 
 const request = Object.freeze({
@@ -112,6 +113,79 @@ test("marks the OpenRouter tool as open-world", async (t) => {
     readOnlyHint: true,
     openWorldHint: true,
   });
+});
+
+test("exposes Ollama as a closed-world labels backend with at most 20 choices", async (t) => {
+  const connection = await connect(async () => assert.fail("chooser should not run"), {
+    backend: "ollama",
+  });
+  t.after(() => connection.close());
+
+  const listed = await connection.rpc("tools/list");
+  const [tool] = listed.result.tools;
+  assert.deepEqual(tool.annotations, { readOnlyHint: true, openWorldHint: false });
+  assert.equal(tool.inputSchema.properties.choices.maxProperties, 20);
+});
+
+test("passes loaded images to the chooser in labels mode", async (t) => {
+  const image = Object.freeze({ mediaType: "image/png", base64: "aW1hZ2U=" });
+  const seenPaths = [];
+  let receivedImages;
+  const imageLoader = async (paths) => {
+    seenPaths.push(...paths);
+    return [image];
+  };
+  const chooser = async ({ choices, images }) => {
+    receivedImages = images;
+    return {
+      choice: "billing",
+      distribution: { billing: 1, technical: 0 },
+      scores: { billing: -0.1, technical: -2 },
+      margin: 1,
+      entropy: 0,
+      boundaryTokens: 1,
+    };
+  };
+  const connection = await connect(chooser, { backend: "ollama", imageLoader });
+  t.after(() => connection.close());
+
+  const listed = await connection.rpc("tools/list");
+  assert.ok("imagePaths" in listed.result.tools[0].inputSchema.properties);
+  const response = await callChoose(connection, { ...request, imagePaths: ["screen.png"] });
+
+  assert.notEqual(response.result.isError, true);
+  assert.deepEqual(seenPaths, ["screen.png"]);
+  assert.deepEqual(receivedImages, [image]);
+});
+
+test("reports image loading failures without exposing local paths", async (t) => {
+  const secretPath = "C:\\Users\\example\\private.png";
+  const connection = await connect(async () => assert.fail("chooser should not run"), {
+    imageLoader: async () => {
+      throw new ImageLoadError(`could not read ${secretPath}`);
+    },
+  });
+  t.after(() => connection.close());
+
+  const response = await callChoose(connection, { ...request, imagePaths: ["missing.png"] });
+
+  assert.equal(response.result.isError, true);
+  assert.equal(response.result.content[0].text,
+    "The image could not be loaded. Check imagePaths and CHOOSEKIT_IMAGE_ROOT.");
+  assert.doesNotMatch(JSON.stringify(response), /private\.png/);
+});
+
+test("does not expose imagePaths without an image loader or in minimal-prefix mode", async (t) => {
+  for (const options of [{}, { mode: "minimal-prefix", imageLoader: async () => [] }]) {
+    await t.test(JSON.stringify(options), async (t) => {
+      const connection = await connect(async () => assert.fail("chooser should not run"), options);
+      t.after(() => connection.close());
+      const listed = await connection.rpc("tools/list");
+      assert.ok(!("imagePaths" in listed.result.tools[0].inputSchema.properties));
+      const response = await callChoose(connection, { ...request, imagePaths: ["screen.png"] });
+      assert.equal(response.result.isError, true);
+    });
+  }
 });
 
 test("OpenRouter accepts 20 choices and preserves the selected choice key", async (t) => {

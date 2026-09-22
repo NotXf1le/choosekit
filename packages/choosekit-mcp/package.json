@@ -1,7 +1,7 @@
 {
   "name": "choosekit-mcp",
-  "version": "0.2.0",
-  "description": "Use choosekit as a local MCP server.",
+  "version": "0.3.0",
+  "description": "Use choosekit as an MCP server.",
   "license": "Apache-2.0",
   "author": {
     "name": "NotXf1le",
@@ -37,7 +37,7 @@
   },
   "dependencies": {
     "@modelcontextprotocol/server": "2.0.0",
-    "choosekit": "^0.5.0",
+    "choosekit": "^0.6.0",
     "zod": "^4.6.4"
   },
   "devDependencies": {
@@ -51,6 +51,7 @@
     "mcp",
     "llm",
     "llama.cpp",
+    "ollama",
     "choosekit"
   ]
 }
