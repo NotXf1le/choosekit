@@ -51,7 +51,7 @@ The project was inspired by [Jev and the System One model interface](https://typ
 
 ## MCP server
 
-[`choosekit-mcp`](packages/choosekit-mcp/README.md) exposes choosekit through llama.cpp or OpenRouter as a read-only stdio tool for Claude Code, Codex, and OpenCode. Select the backend and configure it with environment variables when starting the MCP server.
+[`choosekit-mcp`](packages/choosekit-mcp/README.md) exposes choosekit through llama.cpp, Ollama, or OpenRouter as a read-only stdio tool for Claude Code, Codex, and OpenCode. Select the backend and configure it with environment variables when starting the MCP server.
 
 ## llama.cpp
 
@@ -98,7 +98,7 @@ import { fromOpenRouter } from "choosekit/openrouter";
 
 const choose = fromOpenRouter({
   apiKey: process.env.OPENROUTER_API_KEY!,
-  model: "qwen/qwen3.8-27b",
+  model: "your-model",
 });
 ```
 
@@ -130,6 +130,8 @@ const decision = await choose({
 ```
 
 Supported media types are PNG, JPEG, and WebP. llama.cpp image inputs currently support `labels` mode only.
+
+The MCP server accepts image file paths through `imagePaths` in `labels` mode. Paths are resolved from the server's working directory by default; set `CHOOSEKIT_IMAGE_ROOT` to use another root. Every image must remain within that root and be a PNG, JPEG, or WebP file. With OpenRouter, the image contents are sent to the remote service.
 
 ## Scoring modes
 

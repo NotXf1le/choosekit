@@ -6,14 +6,23 @@ export type Config =
   | {
     readonly backend: "llama-cpp";
     readonly baseURL: string;
+    readonly imageRoot?: string;
     readonly model?: string;
     readonly mode: "labels" | "minimal-prefix";
   }
   | {
     readonly backend: "openrouter";
     readonly apiKey: string;
+    readonly imageRoot?: string;
     readonly model: string;
     readonly provider?: string;
+    readonly mode: "labels";
+  }
+  | {
+    readonly backend: "ollama";
+    readonly baseURL?: string;
+    readonly imageRoot?: string;
+    readonly model: string;
     readonly mode: "labels";
   };
 
@@ -32,8 +41,27 @@ function optionalText(value: string | undefined, name: string): string | undefin
 
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
   const backend = env.CHOOSEKIT_BACKEND?.trim() ?? "llama-cpp";
-  if (backend !== "llama-cpp" && backend !== "openrouter") {
-    throw new TypeError("CHOOSEKIT_BACKEND must be llama-cpp or openrouter.");
+  const imageRoot = optionalText(env.CHOOSEKIT_IMAGE_ROOT, "CHOOSEKIT_IMAGE_ROOT");
+  if (backend !== "llama-cpp" && backend !== "ollama" && backend !== "openrouter") {
+    throw new TypeError("CHOOSEKIT_BACKEND must be llama-cpp, ollama, or openrouter.");
+  }
+
+  if (backend === "ollama") {
+    const mode = env.CHOOSEKIT_MODE?.trim() ?? "labels";
+    if (mode !== "labels") {
+      throw new TypeError("CHOOSEKIT_MODE must be labels when using Ollama.");
+    }
+    const baseURL = optionalText(env.CHOOSEKIT_BASE_URL, "CHOOSEKIT_BASE_URL");
+    if (baseURL !== undefined && !urlSchema.safeParse(baseURL).success) {
+      throw new TypeError("CHOOSEKIT_BASE_URL must be a valid URL.");
+    }
+    return {
+      backend,
+      ...(baseURL === undefined ? {} : { baseURL }),
+      ...(imageRoot === undefined ? {} : { imageRoot }),
+      model: requiredText(env.CHOOSEKIT_MODEL, "CHOOSEKIT_MODEL"),
+      mode,
+    };
   }
 
   if (backend === "openrouter") {
@@ -45,6 +73,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     return {
       backend,
       apiKey: requiredText(env.OPENROUTER_API_KEY, "OPENROUTER_API_KEY"),
+      ...(imageRoot === undefined ? {} : { imageRoot }),
       model: requiredText(env.CHOOSEKIT_MODEL, "CHOOSEKIT_MODEL"),
       ...(provider === undefined ? {} : { provider }),
       mode,
@@ -63,6 +92,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
   return {
     backend,
     baseURL,
+    ...(imageRoot === undefined ? {} : { imageRoot }),
     ...(model === undefined ? {} : { model }),
     mode,
   };

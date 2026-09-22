@@ -2,12 +2,14 @@ import { McpServer } from "@modelcontextprotocol/server";
 import { ScoringError, type Chooser, type Decision, type Usage } from "choosekit";
 import { createRequire } from "node:module";
 import { z } from "zod";
+import { ImageLoadError, type ImageLoader } from "./images.js";
 
 export type ChoiceMode = "labels" | "minimal-prefix";
 
 export interface ServerOptions {
-  readonly backend?: "llama-cpp" | "openrouter";
+  readonly backend?: "llama-cpp" | "ollama" | "openrouter";
   readonly mode?: ChoiceMode;
+  readonly imageLoader?: ImageLoader;
 }
 
 const packageVersion = (createRequire(import.meta.url)("../package.json") as { version: string }).version;
@@ -29,7 +31,8 @@ const decisionSchema = z.object({
   usage: usageSchema.optional(),
 }).strict();
 
-function inputSchema(backend: "llama-cpp" | "openrouter", mode: ChoiceMode) {
+function inputSchema(backend: "llama-cpp" | "ollama" | "openrouter", mode: ChoiceMode,
+  imagesEnabled: boolean) {
   const choicesSchema = z.fromJSONSchema({
     type: "object",
     propertyNames: {
@@ -41,7 +44,7 @@ function inputSchema(backend: "llama-cpp" | "openrouter", mode: ChoiceMode) {
       pattern: "\\S",
     },
     minProperties: 2,
-    ...(backend === "openrouter"
+    ...(backend === "openrouter" || backend === "ollama"
       ? { maxProperties: 20 }
       : mode === "labels" ? { maxProperties: 26 } : {}),
   }) as z.ZodType<Record<string, string>>;
@@ -51,6 +54,11 @@ function inputSchema(backend: "llama-cpp" | "openrouter", mode: ChoiceMode) {
     question: z.string()
       .refine((question) => question.trim().length > 0, "The question must not be empty."),
     choices: choicesSchema,
+    ...(mode === "labels" && imagesEnabled ? {
+      imagePaths: z.array(z.string().min(1)).min(1)
+        .describe("Image file paths inside the configured image root, in display order.")
+        .optional(),
+    } : {}),
   }).strict();
 }
 
@@ -71,6 +79,15 @@ function errorResult(error: unknown, signal: AbortSignal) {
       content: [{ type: "text" as const, text: "The model could not score the supplied choices." }],
     };
   }
+  if (error instanceof ImageLoadError) {
+    return {
+      isError: true as const,
+      content: [{
+        type: "text" as const,
+        text: "The image could not be loaded. Check imagePaths and CHOOSEKIT_IMAGE_ROOT.",
+      }],
+    };
+  }
   return {
     isError: true as const,
     content: [{ type: "text" as const, text: "The choice request failed unexpectedly." }],
@@ -86,8 +103,8 @@ Readonly<Record<string, number | null>> {
 export function buildServer(chooser: Chooser, options: ServerOptions = {}): McpServer {
   if (typeof chooser !== "function") throw new TypeError("chooser must be a function.");
   const backend = options.backend ?? "llama-cpp";
-  if (backend !== "llama-cpp" && backend !== "openrouter") {
-    throw new TypeError("backend must be llama-cpp or openrouter.");
+  if (backend !== "llama-cpp" && backend !== "ollama" && backend !== "openrouter") {
+    throw new TypeError("backend must be llama-cpp, ollama, or openrouter.");
   }
   const mode = options.mode ?? "labels";
   if (mode !== "labels" && mode !== "minimal-prefix") {
@@ -99,19 +116,23 @@ export function buildServer(chooser: Chooser, options: ServerOptions = {}): McpS
     "choose",
     {
       description: toolDescription(mode),
-      inputSchema: inputSchema(backend, mode),
+      inputSchema: inputSchema(backend, mode, options.imageLoader !== undefined),
       outputSchema: decisionSchema,
       annotations: {
         readOnlyHint: true,
         openWorldHint: backend === "openrouter",
       },
     },
-    async ({ context, question, choices }, ctx) => {
+    async ({ context, question, choices, imagePaths }, ctx) => {
       try {
+        const images = imagePaths === undefined
+          ? undefined
+          : await options.imageLoader!(imagePaths as readonly string[], ctx.mcpReq.signal);
         const decision = await chooser({
           context,
           question,
           choices,
+          ...(images === undefined ? {} : { images }),
           signal: ctx.mcpReq.signal,
         }) as Decision<string>;
         const structuredContent: {

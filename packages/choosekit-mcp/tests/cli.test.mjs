@@ -1,6 +1,9 @@
 import assert from "node:assert/strict";
 import { spawn, spawnSync } from "node:child_process";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { createServer } from "node:http";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 
@@ -19,6 +22,7 @@ const request = Object.freeze({
 const configurationKeys = [
   "CHOOSEKIT_BACKEND",
   "CHOOSEKIT_BASE_URL",
+  "CHOOSEKIT_IMAGE_ROOT",
   "CHOOSEKIT_MODEL",
   "CHOOSEKIT_MODE",
   "OPENROUTER_API_KEY",
@@ -131,7 +135,15 @@ test("reports invalid environment configuration without writing to stdout", () =
     ["invalid mode", { CHOOSEKIT_MODE: "keys" },
       "CHOOSEKIT_MODE must be labels or minimal-prefix."],
     ["unknown backend", { CHOOSEKIT_BACKEND: "other" },
-      "CHOOSEKIT_BACKEND must be llama-cpp or openrouter."],
+      "CHOOSEKIT_BACKEND must be llama-cpp, ollama, or openrouter."],
+    ["Ollama without model", {
+      CHOOSEKIT_BACKEND: "ollama",
+    }, "CHOOSEKIT_MODEL is required."],
+    ["Ollama with minimal-prefix", {
+      CHOOSEKIT_BACKEND: "ollama",
+      CHOOSEKIT_MODEL: "test-model",
+      CHOOSEKIT_MODE: "minimal-prefix",
+    }, "CHOOSEKIT_MODE must be labels when using Ollama."],
     ["OpenRouter without API key", {
       CHOOSEKIT_BACKEND: "openrouter", CHOOSEKIT_MODEL: "test/model",
     }, "OPENROUTER_API_KEY is required."],
@@ -193,6 +205,60 @@ test("serves an OpenRouter choice with key, model, and provider kept process-loc
   assert.deepEqual(JSON.parse(response.result.content[0].text), response.result.structuredContent);
   assert.doesNotMatch(process_.lines.join("\n"), new RegExp(secret));
   assert.doesNotMatch(stderr, new RegExp(secret));
+});
+
+test("serves an Ollama image choice through its configured chat endpoint", async (t) => {
+  const imageRoot = await mkdtemp(join(tmpdir(), "choosekit-mcp-images-"));
+  const image = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+  await writeFile(join(imageRoot, "example.png"), image);
+  t.after(() => rm(imageRoot, { recursive: true, force: true }));
+  const requests = [];
+  const ollama = createServer(async (request, response) => {
+    let body = "";
+    for await (const chunk of request) body += chunk;
+    requests.push({ url: request.url, body: JSON.parse(body) });
+    response.setHeader("content-type", "application/json");
+    response.end(JSON.stringify({
+      model: "fixture-model",
+      message: { role: "assistant", content: "B" },
+      done: true,
+      done_reason: "length",
+      prompt_eval_count: 42,
+      eval_count: 1,
+      logprobs: [{
+        token: "B",
+        bytes: [66],
+        logprob: -0.1,
+        top_logprobs: [
+          { token: "A", bytes: [65], logprob: -1.1 },
+          { token: "B", bytes: [66], logprob: -0.1 },
+        ],
+      }],
+    }));
+  });
+  await new Promise((resolve) => ollama.listen(0, "127.0.0.1", resolve));
+  t.after(() => new Promise((resolve) => ollama.close(resolve)));
+  const { port } = ollama.address();
+  const process_ = startCli(cliEnvironment({
+    CHOOSEKIT_BACKEND: "ollama",
+    CHOOSEKIT_BASE_URL: `http://127.0.0.1:${port}`,
+    CHOOSEKIT_IMAGE_ROOT: imageRoot,
+    CHOOSEKIT_MODEL: "fixture-model",
+  }));
+  t.after(() => process_.close());
+  await initialize(process_);
+
+  const response = await process_.rpc("tools/call", {
+    name: "choose",
+    arguments: { ...request, imagePaths: ["example.png"] },
+  });
+
+  assert.equal(response.result.structuredContent.choice, "technical");
+  assert.deepEqual(JSON.parse(response.result.content[0].text), response.result.structuredContent);
+  assert.equal(requests.length, 1);
+  assert.equal(requests[0].url, "/api/chat");
+  assert.equal(requests[0].body.model, "fixture-model");
+  assert.deepEqual(requests[0].body.messages[0].images, [image.toString("base64")]);
 });
 
 test("serves a minimal-prefix choice using the configured llama.cpp endpoint", async (t) => {
