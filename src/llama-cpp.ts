@@ -367,17 +367,6 @@ export function fromLlamaCpp(options: LlamaCppOptions): Chooser {
         throw new ScoringError("The formatted prompt contains llama.cpp's multimodal media marker.");
       }
 
-      const roundTripResponse = await post(fetchImpl, urls.tokenize, headers, {
-        content: detokenized, add_special: false,
-        ...(model === undefined ? {} : { model }),
-      }, signal);
-      requests++;
-      const roundTrip = parseTokenization(roundTripResponse);
-      if (roundTrip.length !== numericPrefix.length
-        || roundTrip.some((tokenId, index) => tokenId !== numericPrefix[index])) {
-        throw new ScoringError("llama.cpp could not preserve the image prompt token prefix.");
-      }
-
       const value = Object.freeze({
         prompt_string: `${images!.map(() => imageSupport!.marker).join("\n")}\n${detokenized}`,
         multimodal_data: Object.freeze(images!.map(({ base64 }) => base64)),

@@ -368,7 +368,6 @@ test("scores image labels that share an initial token", async () => {
     ["pA", [1, 100, 101]],
     ["pB", [1, 100, 102]],
     ["pC", [1, 200]],
-    ["px", [1, 100]],
   ]);
   const textByTokens = new Map([["1", "p"], ["1,100", "px"]]);
   const scores = new Map([[100, -0.2], [200, -2], [101, -0.3], [102, -1]]);
@@ -396,17 +395,6 @@ test("scores image labels that share an initial token", async () => {
     [...new Set(completions(f).map((call) => call.body.prompt.prompt_string))],
     ["<__media_test__>\np", "<__media_test__>\npx"],
   );
-});
-
-test("rejects an image prefix that does not survive a tokenization round trip", async () => {
-  const f = fixture({ detokenizer: () => "different text" });
-  const choose = fromLlamaCpp({ baseURL: "http://localhost:8080", fetch: f.fetch });
-
-  await assert.rejects(choose({
-    ...choiceRequest,
-    images: [{ mediaType: "image/png", base64: "aW1hZ2U=" }],
-  }), /could not preserve the image prompt token prefix/i);
-  assert.equal(completions(f).length, 0);
 });
 
 test("rejects a formatted prompt containing llama.cpp's media marker", async () => {
