@@ -26,7 +26,9 @@ const unorderedTopLogprobs = Object.freeze([
 
 function scoredPosition(topLogprobs = unorderedTopLogprobs) {
   return {
-    token: "A", bytes: [65], logprob: -1.2338635921, top_logprobs: topLogprobs,
+    token: "A", bytes: [65],
+    logprob: topLogprobs.find(({ token }) => token === "A")?.logprob ?? -1.2338635921,
+    top_logprobs: topLogprobs,
   };
 }
 
@@ -64,7 +66,7 @@ function chooser(f, extra = {}) {
   });
 }
 
-test("uses first-position label logprobs instead of the sampled token", async () => {
+test("uses first-position label logprobs", async () => {
   const value = response();
   value.usage = {
     prompt_tokens: 180,
@@ -158,14 +160,33 @@ test("assigns zero probability to labels omitted from top logprobs", async () =>
     .reduce((sum, probability) => sum + probability, 0) - 1) < 1e-12);
 });
 
+test("includes the sampled label when it is absent from top logprobs", async () => {
+  const top = unorderedTopLogprobs.filter(({ token }) => token !== "C");
+  const value = response(top, {
+    logprobs: { content: [{ token: "C", bytes: [67], logprob: -1.1088635921, top_logprobs: top }] },
+  });
+  const decision = await chooser(fixture(value))(request);
+
+  assert.equal(decision.choice, "billing");
+  assert.equal(decision.scores.billing, -1.1088635921);
+  assert.ok(decision.distribution.billing > 0);
+});
+
 const malformed = [
   ["null logprobs", response(undefined, { logprobs: null }), /logprobs/i],
   ["no scored position", response(undefined, { logprobs: { content: [] } }), /exactly one/i],
   ["multiple scored positions", response(undefined, {
     logprobs: { content: [scoredPosition(), scoredPosition()] },
   }), /exactly one/i],
-  ["no choice labels", response([{ token: "x", bytes: [120], logprob: -0.1 }]),
+  ["no choice labels", response([{ token: "x", bytes: [120], logprob: -0.1 }], {
+    logprobs: { content: [{ token: "x", bytes: [120], logprob: -0.1,
+      top_logprobs: [{ token: "x", bytes: [120], logprob: -0.1 }] }] },
+  }),
     /any choice label/i],
+  ["conflicting sampled logprob", response(unorderedTopLogprobs, {
+    logprobs: { content: [{ token: "A", bytes: [65], logprob: -1.5,
+      top_logprobs: unorderedTopLogprobs }] },
+  }), /conflicting.*A|A.*conflicting/i],
   ["duplicate required label", response([...unorderedTopLogprobs, unorderedTopLogprobs[0]]), /duplicate.*A|A.*duplicate/i],
   ["invalid logprob", response(unorderedTopLogprobs.map((entry) =>
     entry.token === "C" ? { ...entry, logprob: 0.1 } : entry)), /logprob/i],
