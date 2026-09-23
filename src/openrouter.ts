@@ -132,6 +132,25 @@ function parseScores(value: unknown, candidates: readonly string[]): {
     found.set(entry.token, entry.logprob);
   }
 
+  const sampled = content[0];
+  if (typeof sampled.token === "string" && expected.has(sampled.token)) {
+    if (typeof sampled.logprob !== "number" || !Number.isFinite(sampled.logprob)
+      || sampled.logprob > 0 || sampled.logprob <= CLAMPED_LOGPROB) {
+      throw new ScoringError(`OpenRouter returned an invalid or clamped logprob for label ${sampled.token}.`);
+    }
+    if (sampled.bytes !== undefined && sampled.bytes !== null) {
+      if (!Array.isArray(sampled.bytes) || sampled.bytes.length !== 1
+        || sampled.bytes[0] !== sampled.token.charCodeAt(0)) {
+        throw new ScoringError(`OpenRouter returned invalid bytes for label ${sampled.token}.`);
+      }
+    }
+    const topLogprob = found.get(sampled.token);
+    if (topLogprob !== undefined && topLogprob !== sampled.logprob) {
+      throw new ScoringError(`OpenRouter returned conflicting logprobs for label ${sampled.token}.`);
+    }
+    found.set(sampled.token, sampled.logprob);
+  }
+
   if (found.size === 0) {
     throw new ScoringError("OpenRouter did not return logprobs for any choice label.");
   }
