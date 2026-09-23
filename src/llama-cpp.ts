@@ -286,9 +286,6 @@ export function fromLlamaCpp(options: LlamaCppOptions): Chooser {
       throw new TypeError("llama.cpp image inputs require addSpecialTokens to be false.");
     }
     signal?.throwIfAborted();
-    const imageSupport = hasImages
-      ? parseImageSupport(await get(fetchImpl, urls.props, headers, signal))
-      : undefined;
     const contents = [prompt, ...candidates.map((candidate) => prompt + candidate)];
     let requests = hasImages ? 1 : 0;
     const tokenizeIndividually = async (): Promise<number[][]> => {
@@ -316,10 +313,8 @@ export function fromLlamaCpp(options: LlamaCppOptions): Chooser {
         }));
       return result;
     };
-    let encoded: number[][];
-    if (addSpecialTokens || batchUnsupported) {
-      encoded = await tokenizeIndividually();
-    } else {
+    const tokenize = async (): Promise<number[][]> => {
+      if (addSpecialTokens || batchUnsupported) return tokenizeIndividually();
       try {
         requests++;
         const content: (string | number)[] = [];
@@ -331,15 +326,20 @@ export function fromLlamaCpp(options: LlamaCppOptions): Chooser {
           content, add_special: false, ...(model === undefined ? {} : { model }),
         }, signal, true);
         signal?.throwIfAborted();
-        encoded = parseBatchedTokenization(response, contents.length);
+        return parseBatchedTokenization(response, contents.length);
       } catch (error) {
         if (!(error instanceof UnsupportedBatchTokenization || error instanceof BatchTokenizationTooLarge)) {
           throw error;
         }
         if (error instanceof UnsupportedBatchTokenization) batchUnsupported = true;
-        encoded = await tokenizeIndividually();
+        return tokenizeIndividually();
       }
-    }
+    };
+    const [imageSupport, encoded] = hasImages
+      ? await Promise.all([
+        get(fetchImpl, urls.props, headers, signal).then(parseImageSupport), tokenize(),
+      ])
+      : [undefined, await tokenize()];
 
     const prefix = encoded[0]!;
     const { root: treeRoot, shared } = candidateTree(prefix, encoded.slice(1));

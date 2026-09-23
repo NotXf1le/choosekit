@@ -295,6 +295,34 @@ test("scores image labels through native multimodal completion", async () => {
   assert.equal(completions(f)[1].body.n_probs, 1);
 });
 
+test("tokenizes image choices while waiting for llama.cpp vision support", async () => {
+  const f = fixture();
+  const started = [];
+  let releaseProps;
+  const propsGate = new Promise((resolve) => { releaseProps = resolve; });
+  const fetch = async (url, init) => {
+    const path = new URL(url).pathname;
+    started.push(path);
+    if (path === "/props") await propsGate;
+    return f.fetch(url, init);
+  };
+  const choose = fromLlamaCpp({ baseURL: "http://localhost:8080", fetch });
+  const pending = choose({
+    ...choiceRequest,
+    images: [{ mediaType: "image/png", base64: "aW1hZ2U=" }],
+  });
+
+  try {
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.ok(started.includes("/props"));
+    assert.ok(started.includes("/tokenize"));
+    assert.equal(started.includes("/completion"), false);
+  } finally {
+    releaseProps();
+  }
+  assert.equal((await pending).choice, "wait");
+});
+
 test("preserves a tokenization-boundary rollback for image labels", async () => {
   const pairs = (text) => {
     const bytes = new TextEncoder().encode(text);
@@ -401,7 +429,7 @@ test("rejects image inputs when llama.cpp does not advertise vision", async () =
     ...choiceRequest,
     images: [{ mediaType: "image/png", base64: "aW1hZ2U=" }],
   }), /does not advertise vision support/i);
-  assert.deepEqual(f.calls.map((call) => call.path), ["/props"]);
+  assert.equal(completions(f).length, 0);
 });
 
 test("rejects image inputs when llama.cpp omits the media marker", async () => {
@@ -412,7 +440,7 @@ test("rejects image inputs when llama.cpp omits the media marker", async () => {
     ...choiceRequest,
     images: [{ mediaType: "image/png", base64: "aW1hZ2U=" }],
   }), /multimodal media marker/i);
-  assert.deepEqual(f.calls.map((call) => call.path), ["/props"]);
+  assert.equal(completions(f).length, 0);
 });
 
 test("rejects an invalid llama.cpp detokenization response", async () => {
