@@ -42,6 +42,16 @@ interface Branch {
   readonly score: number;
 }
 
+class UnsupportedBatchTokenization extends Error {}
+class BatchTokenizationTooLarge extends Error {}
+
+const TOKENIZE_CONCURRENCY = 16;
+
+function isBatchFormatRejection(message: string): boolean {
+  return /(?:content|input).{0,40}(?:must|expected|requires?).{0,40}(?:string|array)|(?:expected|requires?).{0,40}string.{0,40}content|(?:unsupported|invalid).{0,40}(?:mixed|array)|(?:mixed|array).{0,40}(?:not supported)/i
+    .test(message);
+}
+
 function endpoints(baseURL: string, model?: string): Endpoints {
   requireText(baseURL, "baseURL");
   const url = new URL(baseURL);
@@ -77,7 +87,8 @@ function requestHeaders(value: unknown): Readonly<Record<string, string>> {
 }
 
 async function post(fetchImpl: typeof globalThis.fetch, url: string,
-  headers: Readonly<Record<string, string>>, body: unknown, signal?: AbortSignal): Promise<unknown> {
+  headers: Readonly<Record<string, string>>, body: unknown, signal?: AbortSignal,
+  batchTokenize = false): Promise<unknown> {
   signal?.throwIfAborted();
   let response: Response;
   try {
@@ -90,6 +101,12 @@ async function post(fetchImpl: typeof globalThis.fetch, url: string,
   }
   signal?.throwIfAborted();
   if (!response.ok) {
+    if (batchTokenize && response.status === 413) throw new BatchTokenizationTooLarge();
+    if (batchTokenize && [400, 415, 422].includes(response.status)) {
+      const message = await response.text();
+      signal?.throwIfAborted();
+      if (isBatchFormatRejection(message)) throw new UnsupportedBatchTokenization();
+    }
     throw new ScoringError(`llama.cpp returned HTTP ${response.status} for ${new URL(url).pathname}.`);
   }
   try {
@@ -129,6 +146,29 @@ async function get(fetchImpl: typeof globalThis.fetch, url: string,
 function parseTokenization(value: unknown): number[] {
   if (!isRecord(value)) throw new ScoringError("llama.cpp returned an invalid tokenization.");
   return tokenIds(value.tokens);
+}
+
+function parseBatchedTokenization(value: unknown, expectedParts: number): number[][] {
+  if (!isRecord(value) || !Array.isArray(value.tokens)) {
+    throw new ScoringError("llama.cpp returned an invalid tokenization.");
+  }
+  const parts: number[][] = [[]];
+  let markers = 0;
+  for (const id of value.tokens) {
+    if (id === -1) {
+      markers++;
+      parts.push([]);
+    } else if (isCount(id)) {
+      parts[parts.length - 1]!.push(id);
+    } else {
+      throw new ScoringError("llama.cpp returned an invalid batched token ID.");
+    }
+  }
+  if (markers === 0 && parts[0]!.length > 0) throw new UnsupportedBatchTokenization();
+  if (markers !== expectedParts - 1 || parts.some((part) => part.length === 0)) {
+    throw new ScoringError("llama.cpp returned invalid batched tokenization boundaries.");
+  }
+  return parts;
 }
 
 function parseDetokenization(value: unknown): string {
@@ -236,6 +276,7 @@ export function fromLlamaCpp(options: LlamaCppOptions): Chooser {
   if (typeof fetchImpl !== "function") throw new TypeError("A fetch implementation is required.");
   const urls = endpoints(baseURL, model);
   const headers = requestHeaders(options.headers);
+  let batchUnsupported = false;
   const score: Scorer = async ({ prompt, candidates, images, signal }) => {
     const hasImages = images !== undefined && images.length > 0;
     if (hasImages && mode !== "labels") {
@@ -248,13 +289,56 @@ export function fromLlamaCpp(options: LlamaCppOptions): Chooser {
     const imageSupport = hasImages
       ? parseImageSupport(await get(fetchImpl, urls.props, headers, signal))
       : undefined;
-    const encoded: number[][] = [];
-    for (const content of [prompt, ...candidates.map((candidate) => prompt + candidate)]) {
-      const response = await post(fetchImpl, urls.tokenize, headers, {
-        content, add_special: addSpecialTokens, ...(model === undefined ? {} : { model }),
-      }, signal);
-      signal?.throwIfAborted();
-      encoded.push(parseTokenization(response));
+    const contents = [prompt, ...candidates.map((candidate) => prompt + candidate)];
+    let requests = hasImages ? 1 : 0;
+    const tokenizeIndividually = async (): Promise<number[][]> => {
+      const result: number[][] = new Array(contents.length);
+      let next = 0;
+      let failed = false;
+      await Promise.all(Array.from({ length: Math.min(TOKENIZE_CONCURRENCY, contents.length) },
+        async () => {
+          try {
+            while (!failed && next < contents.length) {
+              const index = next++;
+              signal?.throwIfAborted();
+              requests++;
+              const response = await post(fetchImpl, urls.tokenize, headers, {
+                content: contents[index], add_special: addSpecialTokens,
+                ...(model === undefined ? {} : { model }),
+              }, signal);
+              signal?.throwIfAborted();
+              result[index] = parseTokenization(response);
+            }
+          } catch (error) {
+            failed = true;
+            throw error;
+          }
+        }));
+      return result;
+    };
+    let encoded: number[][];
+    if (addSpecialTokens || batchUnsupported) {
+      encoded = await tokenizeIndividually();
+    } else {
+      try {
+        requests++;
+        const content: (string | number)[] = [];
+        for (const part of contents) {
+          if (content.length > 0) content.push(-1);
+          content.push(part);
+        }
+        const response = await post(fetchImpl, urls.tokenize, headers, {
+          content, add_special: false, ...(model === undefined ? {} : { model }),
+        }, signal, true);
+        signal?.throwIfAborted();
+        encoded = parseBatchedTokenization(response, contents.length);
+      } catch (error) {
+        if (!(error instanceof UnsupportedBatchTokenization || error instanceof BatchTokenizationTooLarge)) {
+          throw error;
+        }
+        if (error instanceof UnsupportedBatchTokenization) batchUnsupported = true;
+        encoded = await tokenizeIndividually();
+      }
     }
 
     const prefix = encoded[0]!;
@@ -264,7 +348,6 @@ export function fromLlamaCpp(options: LlamaCppOptions): Chooser {
     let promptTokens = 0;
     let cachedTokens: number | null = 0;
     let completionTokens = 0;
-    let requests = encoded.length + (hasImages ? 1 : 0);
 
     let root = treeRoot;
     const rootSuffix: number[] = [];
@@ -330,7 +413,9 @@ export function fromLlamaCpp(options: LlamaCppOptions): Chooser {
           prompt: promptValue,
           ...(model === undefined ? {} : { model }),
           n_predict: 1,
-          n_probs: collectSiblings ? 64 : 1,
+          n_probs: collectSiblings
+            ? Math.min(256, Math.max(64, children.length * 16))
+            : 1,
           post_sampling_probs: false,
           backend_sampling: false,
           samplers: ["top_k"],
