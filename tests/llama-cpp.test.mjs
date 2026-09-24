@@ -15,7 +15,7 @@ const decode = (tokens) => new TextDecoder().decode(
 );
 
 function fixture({ tokenizer = encode, detokenizer = decode, logprob = () => -1,
-  topTokenIds = (target) => [target], transform,
+  topTokenIds = (target) => [target], transform, batchTokenization,
   props = { modalities: { vision: true }, media_marker: "<__media_test__>" } } = {}) {
   const calls = [];
   const fetch = async (url, init) => {
@@ -24,7 +24,14 @@ function fixture({ tokenizer = encode, detokenizer = decode, logprob = () => -1,
     const body = init.body === undefined ? undefined : JSON.parse(init.body);
     calls.push({ url: parsedURL, path, body, headers: init.headers, signal: init.signal });
     if (path === "/props") return json(props);
-    if (path === "/tokenize") return json({ tokens: tokenizer(body.content, body.add_special) });
+    if (path === "/tokenize") {
+      if (Array.isArray(body.content)) {
+        if (batchTokenization) return batchTokenization(body);
+        return json({ tokens: body.content.flatMap((part) => part === -1
+          ? [-1] : tokenizer(part, body.add_special)) });
+      }
+      return json({ tokens: tokenizer(body.content, body.add_special) });
+    }
     if (path === "/detokenize") return json({ content: detokenizer(body.tokens) });
     if (path !== "/completion") return json({}, 404);
 
@@ -53,6 +60,7 @@ function json(value, status = 200) {
 }
 
 const completions = (f) => f.calls.filter((call) => call.path === "/completion");
+const tokenizations = (f) => f.calls.filter((call) => call.path === "/tokenize");
 
 test("maps label scores back to choice keys and reuses sibling logprobs", async () => {
   const a = encode("A")[0];
@@ -73,6 +81,168 @@ test("maps label scores back to choice keys and reuses sibling logprobs", async 
   assert.equal(decision.usage.requests, f.calls.length);
   assert.equal(completions(f).length, 1);
   assert.equal(completions(f)[0].body.model, "local-model");
+  const [tokenization] = tokenizations(f);
+  assert.equal(tokenizations(f).length, 1);
+  const prompt = tokenization.body.content[0];
+  assert.deepEqual(tokenization.body.content, [prompt, -1, `${prompt}A`, -1, `${prompt}B`]);
+  assert.equal(tokenization.body.add_special, false);
+  assert.equal(tokenization.body.model, "local-model");
+  assert.equal(decision.usage.requests, 2);
+});
+
+test("scores eight labels with one completion when the wider top list covers them", async () => {
+  const labels = [..."ABCDEFGH"];
+  const ids = labels.map((label) => encode(label)[0]);
+  const scores = new Map(ids.map((id, index) => [id, index === 7 ? -0.1 : -index - 1]));
+  const f = fixture({
+    logprob: (id) => scores.get(id) ?? -10,
+    topTokenIds: (target, body) => body.n_probs >= 128 ? ids : [target],
+  });
+  const choose = fromLlamaCpp({ baseURL: "http://localhost:8080", fetch: f.fetch });
+  const choices = Object.fromEntries(labels.map((label) => [`option_${label}`, `Option ${label}`]));
+
+  const decision = await choose({ ...choiceRequest, choices });
+
+  assert.equal(decision.choice, "option_H");
+  assert.equal(decision.scores.option_H, -0.1);
+  assert.equal(completions(f).length, 1);
+  assert.equal(completions(f)[0].body.n_probs, 128);
+});
+
+test("falls back to bounded, out-of-order individual tokenizations and remembers incompatibility", async () => {
+  const labels = [..."ABCDEFGHIJKLMNOPQRST"];
+  const ids = labels.map((label) => encode(label)[0]);
+  const scores = new Map(ids.map((id, index) => [id, index === 7 ? -0.1 : -index - 1]));
+  const f = fixture({
+    batchTokenization: () => json({ tokens: [123] }),
+    logprob: (id) => scores.get(id) ?? -10,
+    topTokenIds: () => ids,
+  });
+  let active = 0;
+  let maximumActive = 0;
+  const completed = [];
+  const fetch = async (url, init) => {
+    const body = JSON.parse(init.body);
+    if (new URL(url).pathname === "/tokenize" && typeof body.content === "string") {
+      active++;
+      maximumActive = Math.max(maximumActive, active);
+      try {
+        await new Promise((resolve) => setTimeout(resolve, body.content.endsWith("A") ? 20 : 1));
+        const result = await f.fetch(url, init);
+        completed.push(body.content);
+        return result;
+      } finally {
+        active--;
+      }
+    }
+    return f.fetch(url, init);
+  };
+  const choose = fromLlamaCpp({ baseURL: "http://localhost:8080", fetch });
+  const choices = Object.fromEntries(labels.map((label) => [`option_${label}`, `Option ${label}`]));
+
+  const first = await choose({ ...choiceRequest, choices });
+  const second = await choose({ ...choiceRequest, choices });
+
+  for (const decision of [first, second]) {
+    assert.equal(decision.choice, "option_H");
+    assert.equal(decision.scores.option_H, -0.1);
+    assert.equal(decision.scores.option_A, -1);
+  }
+  assert.equal(first.usage.requests, 23);
+  assert.equal(second.usage.requests, 22);
+  assert.equal(tokenizations(f).filter((call) => Array.isArray(call.body.content)).length, 1);
+  assert.equal(tokenizations(f).filter((call) => typeof call.body.content === "string").length, 42);
+  assert.equal(maximumActive, 16);
+  assert.ok(completed.findIndex((content) => content.endsWith("B"))
+    < completed.findIndex((content) => content.endsWith("A")),
+  "a faster later request should complete before the first candidate");
+});
+
+test("retries a batch after a request-specific 413, with individual fallback for that invocation", async () => {
+  const f = fixture({
+    batchTokenization: () => json({ error: "payload too large" }, 413),
+    topTokenIds: () => [encode("A")[0], encode("B")[0]],
+  });
+  const choose = fromLlamaCpp({ baseURL: "http://localhost:8080", fetch: f.fetch });
+
+  const first = await choose(choiceRequest);
+  const second = await choose(choiceRequest);
+
+  assert.equal(first.choice, "wait");
+  assert.equal(second.choice, "wait");
+  assert.equal(first.usage.requests, 5);
+  assert.equal(second.usage.requests, 5);
+  assert.equal(tokenizations(f).filter((call) => Array.isArray(call.body.content)).length, 2);
+});
+
+test("remembers a format-specific HTTP 400 rejection for this chooser", async () => {
+  const f = fixture({ batchTokenization: () => json({ error: "content must be a string" }, 400) });
+  const choose = fromLlamaCpp({ baseURL: "http://localhost:8080", fetch: f.fetch });
+
+  assert.equal((await choose(choiceRequest)).choice, "wait");
+  assert.equal((await choose(choiceRequest)).choice, "wait");
+  assert.equal(tokenizations(f).filter((call) => Array.isArray(call.body.content)).length, 1);
+  assert.equal(tokenizations(f).filter((call) => typeof call.body.content === "string").length, 6);
+});
+
+test("addSpecialTokens retains independent tokenization with special insertion", async () => {
+  const f = fixture({ topTokenIds: () => [encode("A")[0], encode("B")[0]] });
+  const decision = await fromLlamaCpp({
+    baseURL: "http://localhost:8080", addSpecialTokens: true, fetch: f.fetch,
+  })(choiceRequest);
+
+  assert.equal(decision.choice, "wait");
+  assert.equal(decision.usage.requests, 4);
+  assert.equal(tokenizations(f).length, 3);
+  assert.ok(tokenizations(f).every((call) => typeof call.body.content === "string"
+    && call.body.add_special === true));
+});
+
+test("does not fall back on server, authorization, or rate-limit errors", async () => {
+  for (const status of [500, 401, 429]) {
+    const f = fixture({ batchTokenization: () => json({ error: "unavailable" }, status) });
+    const choose = fromLlamaCpp({ baseURL: "http://localhost:8080", fetch: f.fetch });
+    await assert.rejects(choose(choiceRequest), new RegExp(`HTTP ${status}`));
+    assert.equal(tokenizations(f).length, 1);
+    assert.equal(completions(f).length, 0);
+  }
+});
+
+test("does not fall back on network failure, invalid JSON, or abort", async () => {
+  const failure = new Error("network unavailable");
+  for (const batchTokenization of [
+    () => Promise.reject(failure),
+    () => new Response("not JSON", { headers: { "content-type": "application/json" } }),
+  ]) {
+    const f = fixture({ batchTokenization });
+    await assert.rejects(fromLlamaCpp({ baseURL: "http://localhost:8080", fetch: f.fetch })(choiceRequest));
+    assert.equal(tokenizations(f).length, 1);
+    assert.equal(completions(f).length, 0);
+  }
+  const controller = new AbortController();
+  const f = fixture();
+  const fetch = (url, init) => {
+    if (new URL(url).pathname === "/tokenize") controller.abort();
+    return f.fetch(url, init);
+  };
+  const choose = fromLlamaCpp({ baseURL: "http://localhost:8080", fetch });
+  await assert.rejects(choose({ ...choiceRequest, signal: controller.signal }),
+    (error) => error?.name === "AbortError");
+  assert.equal(tokenizations(f).length, 1);
+  assert.equal(completions(f).length, 0);
+});
+
+test("does not treat malformed batch token IDs or generic HTTP 400 as incompatibility", async () => {
+  for (const batchTokenization of [
+    () => json({ tokens: [1, -1, 2, -1, 3, -1] }),
+    () => json({ tokens: [1, -1, "bad", -1, 3] }),
+    () => json({ error: "invalid model" }, 400),
+  ]) {
+    const f = fixture({ batchTokenization });
+    await assert.rejects(fromLlamaCpp({ baseURL: "http://localhost:8080", fetch: f.fetch })(choiceRequest));
+    assert.equal(tokenizations(f).length, 1);
+    assert.equal(completions(f).length, 0);
+  }
 });
 
 test("scores image labels through native multimodal completion", async () => {
@@ -87,6 +257,7 @@ test("scores image labels through native multimodal completion", async () => {
   const choose = fromLlamaCpp({
     baseURL: "http://localhost:8080/v1",
     model: "vision/model",
+    probeMissingLogprobs: true,
     headers: { authorization: "Bearer test" },
     fetch: f.fetch,
   });
@@ -104,6 +275,7 @@ test("scores image labels through native multimodal completion", async () => {
   assert.deepEqual(decision.scores, { wait: -0.2, deploy: -1.5 });
   assert.equal(decision.usage.promptTokens, 246);
   assert.equal(decision.usage.requests, f.calls.length);
+  assert.equal(tokenizations(f).filter((call) => Array.isArray(call.body.content)).length, 1);
   const propsCall = f.calls.find((call) => call.path === "/props");
   assert.equal(propsCall.url.searchParams.get("model"), "vision/model");
   assert.equal(propsCall.signal, controller.signal);
@@ -122,6 +294,34 @@ test("scores image labels through native multimodal completion", async () => {
     assert.equal(call.signal, controller.signal);
   }
   assert.equal(completions(f)[1].body.n_probs, 1);
+});
+
+test("tokenizes image choices while waiting for llama.cpp vision support", async () => {
+  const f = fixture();
+  const started = [];
+  let releaseProps;
+  const propsGate = new Promise((resolve) => { releaseProps = resolve; });
+  const fetch = async (url, init) => {
+    const path = new URL(url).pathname;
+    started.push(path);
+    if (path === "/props") await propsGate;
+    return f.fetch(url, init);
+  };
+  const choose = fromLlamaCpp({ baseURL: "http://localhost:8080", fetch });
+  const pending = choose({
+    ...choiceRequest,
+    images: [{ mediaType: "image/png", base64: "aW1hZ2U=" }],
+  });
+
+  try {
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.ok(started.includes("/props"));
+    assert.ok(started.includes("/tokenize"));
+    assert.equal(started.includes("/completion"), false);
+  } finally {
+    releaseProps();
+  }
+  assert.equal((await pending).choice, "wait");
 });
 
 test("preserves a tokenization-boundary rollback for image labels", async () => {
@@ -169,7 +369,6 @@ test("scores image labels that share an initial token", async () => {
     ["pA", [1, 100, 101]],
     ["pB", [1, 100, 102]],
     ["pC", [1, 200]],
-    ["px", [1, 100]],
   ]);
   const textByTokens = new Map([["1", "p"], ["1,100", "px"]]);
   const scores = new Map([[100, -0.2], [200, -2], [101, -0.3], [102, -1]]);
@@ -180,6 +379,7 @@ test("scores image labels that share an initial token", async () => {
   });
   const choose = fromLlamaCpp({
     baseURL: "http://localhost:8080",
+    probeMissingLogprobs: true,
     fetch: f.fetch,
     formatPrompt: ({ context }) => context,
   });
@@ -197,17 +397,6 @@ test("scores image labels that share an initial token", async () => {
     [...new Set(completions(f).map((call) => call.body.prompt.prompt_string))],
     ["<__media_test__>\np", "<__media_test__>\npx"],
   );
-});
-
-test("rejects an image prefix that does not survive a tokenization round trip", async () => {
-  const f = fixture({ detokenizer: () => "different text" });
-  const choose = fromLlamaCpp({ baseURL: "http://localhost:8080", fetch: f.fetch });
-
-  await assert.rejects(choose({
-    ...choiceRequest,
-    images: [{ mediaType: "image/png", base64: "aW1hZ2U=" }],
-  }), /could not preserve the image prompt token prefix/i);
-  assert.equal(completions(f).length, 0);
 });
 
 test("rejects a formatted prompt containing llama.cpp's media marker", async () => {
@@ -230,7 +419,7 @@ test("rejects image inputs when llama.cpp does not advertise vision", async () =
     ...choiceRequest,
     images: [{ mediaType: "image/png", base64: "aW1hZ2U=" }],
   }), /does not advertise vision support/i);
-  assert.deepEqual(f.calls.map((call) => call.path), ["/props"]);
+  assert.equal(completions(f).length, 0);
 });
 
 test("rejects image inputs when llama.cpp omits the media marker", async () => {
@@ -241,7 +430,7 @@ test("rejects image inputs when llama.cpp omits the media marker", async () => {
     ...choiceRequest,
     images: [{ mediaType: "image/png", base64: "aW1hZ2U=" }],
   }), /multimodal media marker/i);
-  assert.deepEqual(f.calls.map((call) => call.path), ["/props"]);
+  assert.equal(completions(f).length, 0);
 });
 
 test("rejects an invalid llama.cpp detokenization response", async () => {
@@ -281,7 +470,7 @@ test("rejects special-token insertion for llama.cpp image inputs", async () => {
   assert.equal(f.calls.length, 0);
 });
 
-test("scores candidates separately when top logprobs contain none of them", async () => {
+test("assigns zero probability to choices missing from the first top logprobs", async () => {
   const scores = new Map([[encode("A")[0], -0.3], [encode("B")[0], -1.4]]);
   const f = fixture({
     logprob: (id) => scores.get(id) ?? -10,
@@ -289,6 +478,23 @@ test("scores candidates separately when top logprobs contain none of them", asyn
   });
 
   const decision = await fromLlamaCpp({ baseURL: "http://localhost:8080", fetch: f.fetch })(choiceRequest);
+
+  assert.deepEqual(decision.scores, { wait: -0.3, deploy: -Infinity });
+  assert.deepEqual(decision.distribution, { wait: 1, deploy: 0 });
+  assert.equal(completions(f).length, 1);
+  assert.equal(decision.usage.requests, f.calls.length);
+});
+
+test("probes choices missing from the first top logprobs when requested", async () => {
+  const scores = new Map([[encode("A")[0], -0.3], [encode("B")[0], -1.4]]);
+  const f = fixture({
+    logprob: (id) => scores.get(id) ?? -10,
+    topTokenIds: () => [999],
+  });
+
+  const decision = await fromLlamaCpp({
+    baseURL: "http://localhost:8080", probeMissingLogprobs: true, fetch: f.fetch,
+  })(choiceRequest);
 
   assert.equal(decision.choice, "wait");
   assert.deepEqual(decision.scores, { wait: -0.3, deploy: -1.4 });
@@ -346,6 +552,21 @@ test("continues scoring a group that separates at a deeper branch", async () => 
     completions(f)[0].body.prompt.length + 1);
 });
 
+test("assigns zero probability to every key below a missing minimal-prefix branch", async () => {
+  const a = encode("a")[0];
+  const f = fixture({ topTokenIds: () => [a] });
+  const choose = fromLlamaCpp({
+    baseURL: "http://localhost:8080", mode: "minimal-prefix", fetch: f.fetch,
+  });
+
+  const decision = await choose({
+    context: "Choose a key.", question: "Which key?", choices: { a: "A", ba: "BA", bb: "BB" },
+  });
+
+  assert.deepEqual(decision.distribution, { a: 1, ba: 0, bb: 0 });
+  assert.equal(completions(f).length, 1);
+});
+
 test("reports a tokenization-boundary rollback", async () => {
   const pairs = (text, special = false) => {
     const bytes = new TextEncoder().encode(text);
@@ -375,6 +596,8 @@ test("reports a tokenization-boundary rollback", async () => {
   assert.equal(decision.choice, "first");
   assert.equal(decision.boundaryTokens, 1);
   assert.equal(completions(f)[0].body.prompt.length, 1);
+  assert.deepEqual(tokenizations(f).map((call) => call.body.content),
+    [["abc", -1, "abcA", -1, "abcB"]]);
 });
 
 test("rejects a probability attached to a different token", async () => {
