@@ -257,6 +257,7 @@ test("scores image labels through native multimodal completion", async () => {
   const choose = fromLlamaCpp({
     baseURL: "http://localhost:8080/v1",
     model: "vision/model",
+    probeMissingLogprobs: true,
     headers: { authorization: "Bearer test" },
     fetch: f.fetch,
   });
@@ -378,6 +379,7 @@ test("scores image labels that share an initial token", async () => {
   });
   const choose = fromLlamaCpp({
     baseURL: "http://localhost:8080",
+    probeMissingLogprobs: true,
     fetch: f.fetch,
     formatPrompt: ({ context }) => context,
   });
@@ -468,7 +470,7 @@ test("rejects special-token insertion for llama.cpp image inputs", async () => {
   assert.equal(f.calls.length, 0);
 });
 
-test("scores candidates separately when top logprobs contain none of them", async () => {
+test("assigns zero probability to choices missing from the first top logprobs", async () => {
   const scores = new Map([[encode("A")[0], -0.3], [encode("B")[0], -1.4]]);
   const f = fixture({
     logprob: (id) => scores.get(id) ?? -10,
@@ -476,6 +478,23 @@ test("scores candidates separately when top logprobs contain none of them", asyn
   });
 
   const decision = await fromLlamaCpp({ baseURL: "http://localhost:8080", fetch: f.fetch })(choiceRequest);
+
+  assert.deepEqual(decision.scores, { wait: -0.3, deploy: -Infinity });
+  assert.deepEqual(decision.distribution, { wait: 1, deploy: 0 });
+  assert.equal(completions(f).length, 1);
+  assert.equal(decision.usage.requests, f.calls.length);
+});
+
+test("probes choices missing from the first top logprobs when requested", async () => {
+  const scores = new Map([[encode("A")[0], -0.3], [encode("B")[0], -1.4]]);
+  const f = fixture({
+    logprob: (id) => scores.get(id) ?? -10,
+    topTokenIds: () => [999],
+  });
+
+  const decision = await fromLlamaCpp({
+    baseURL: "http://localhost:8080", probeMissingLogprobs: true, fetch: f.fetch,
+  })(choiceRequest);
 
   assert.equal(decision.choice, "wait");
   assert.deepEqual(decision.scores, { wait: -0.3, deploy: -1.4 });
@@ -531,6 +550,21 @@ test("continues scoring a group that separates at a deeper branch", async () => 
   assert.equal(completions(f).length, 2);
   assert.equal(completions(f)[1].body.prompt.length,
     completions(f)[0].body.prompt.length + 1);
+});
+
+test("assigns zero probability to every key below a missing minimal-prefix branch", async () => {
+  const a = encode("a")[0];
+  const f = fixture({ topTokenIds: () => [a] });
+  const choose = fromLlamaCpp({
+    baseURL: "http://localhost:8080", mode: "minimal-prefix", fetch: f.fetch,
+  });
+
+  const decision = await choose({
+    context: "Choose a key.", question: "Which key?", choices: { a: "A", ba: "BA", bb: "BB" },
+  });
+
+  assert.deepEqual(decision.distribution, { a: 1, ba: 0, bb: 0 });
+  assert.equal(completions(f).length, 1);
 });
 
 test("reports a tokenization-boundary rollback", async () => {

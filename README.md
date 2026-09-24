@@ -79,6 +79,8 @@ console.log(decision.distribution); // { yes: ..., no: ... }
 
 The llama.cpp backend requires its native `/tokenize` and `/completion` endpoints. `minimal-prefix` is available only with this backend.
 
+Set `probeMissingLogprobs: true` to score low-probability choices outside llama.cpp's returned `top_logprobs`.
+
 The library has no telemetry.
 
 ## Ollama

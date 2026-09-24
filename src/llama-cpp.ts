@@ -14,6 +14,8 @@ export interface LlamaCppOptions extends ChooserOptions {
   readonly fetch?: typeof globalThis.fetch;
   /** Controls add_special for llama.cpp tokenization. Defaults to false; image inputs require false. */
   readonly addSpecialTokens?: boolean;
+  /** Probe choices missing from the first top-logprob list. Defaults to false. */
+  readonly probeMissingLogprobs?: boolean;
 }
 
 interface Endpoints {
@@ -263,12 +265,16 @@ function parseProbe(value: unknown, expectedPromptTokens: number | null,
 
 export function fromLlamaCpp(options: LlamaCppOptions): Chooser {
   if (!isRecord(options)) throw new TypeError("options must be an object.");
-  const { baseURL, model, mode = "labels", addSpecialTokens = false, formatPrompt } = options;
+  const { baseURL, model, mode = "labels", addSpecialTokens = false,
+    probeMissingLogprobs = false, formatPrompt } = options;
   if (model !== undefined) requireText(model, "model");
   if (mode !== "labels" && mode !== "minimal-prefix") {
     throw new TypeError("mode must be labels or minimal-prefix.");
   }
   if (typeof addSpecialTokens !== "boolean") throw new TypeError("addSpecialTokens must be a boolean.");
+  if (typeof probeMissingLogprobs !== "boolean") {
+    throw new TypeError("probeMissingLogprobs must be a boolean.");
+  }
   if (options.fetch !== undefined && typeof options.fetch !== "function") {
     throw new TypeError("fetch must be a function.");
   }
@@ -396,6 +402,7 @@ export function fromLlamaCpp(options: LlamaCppOptions): Chooser {
       const promptValue = hasImages ? await materializeImagePrompt(numericPrefix) : numericPrefix;
       for (const [targetTokenId] of children) {
         if (siblingLogprobs.has(targetTokenId)) continue;
+        if (!probeMissingLogprobs && siblingLogprobs.size > 0) break;
         const collectSiblings = siblingLogprobs.size === 0 && children.length > 1;
         signal?.throwIfAborted();
         const response = await post(fetchImpl, urls.completion, headers, {
@@ -437,7 +444,11 @@ export function fromLlamaCpp(options: LlamaCppOptions): Chooser {
       for (const [targetTokenId, node] of children) {
         const logprob = siblingLogprobs.get(targetTokenId);
         if (logprob === undefined) {
-          throw new ScoringError("A candidate branch is missing its raw log probability.");
+          if (probeMissingLogprobs) {
+            throw new ScoringError("A candidate branch is missing its raw log probability.");
+          }
+          for (const index of groups.get(targetTokenId)!) scores[index] = -Infinity;
+          continue;
         }
         const value = branch.score + logprob;
         if (!Number.isFinite(value)) {
