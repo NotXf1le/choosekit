@@ -25,6 +25,7 @@ const configurationKeys = [
   "CHOOSEKIT_IMAGE_ROOT",
   "CHOOSEKIT_MODEL",
   "CHOOSEKIT_MODE",
+  "CHOOSEKIT_PROBE_MISSING_LOGPROBS",
   "OPENROUTER_API_KEY",
   "OPENROUTER_PROVIDER",
 ];
@@ -134,6 +135,8 @@ test("reports invalid environment configuration without writing to stdout", () =
       "CHOOSEKIT_BASE_URL must be a valid URL."],
     ["invalid mode", { CHOOSEKIT_MODE: "keys" },
       "CHOOSEKIT_MODE must be labels or minimal-prefix."],
+    ["invalid missing-logprob setting", { CHOOSEKIT_PROBE_MISSING_LOGPROBS: "1" },
+      "CHOOSEKIT_PROBE_MISSING_LOGPROBS must be true or false."],
     ["unknown backend", { CHOOSEKIT_BACKEND: "other" },
       "CHOOSEKIT_BACKEND must be llama-cpp, ollama, or openrouter."],
     ["Ollama without model", {
@@ -296,6 +299,7 @@ test("serves a minimal-prefix choice using the configured llama.cpp endpoint", a
     CHOOSEKIT_BASE_URL: `http://127.0.0.1:${port}`,
     CHOOSEKIT_MODEL: "fixture-model",
     CHOOSEKIT_MODE: "minimal-prefix",
+    CHOOSEKIT_PROBE_MISSING_LOGPROBS: "true",
   }));
   t.after(() => process_.close());
   await initialize(process_);
