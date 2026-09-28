@@ -9,6 +9,7 @@ export type Config =
     readonly imageRoot?: string;
     readonly model?: string;
     readonly mode: "labels" | "minimal-prefix";
+    readonly probeMissingLogprobs: boolean;
   }
   | {
     readonly backend: "openrouter";
@@ -89,11 +90,16 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
   if (mode !== "labels" && mode !== "minimal-prefix") {
     throw new TypeError("CHOOSEKIT_MODE must be labels or minimal-prefix.");
   }
+  const probe = env.CHOOSEKIT_PROBE_MISSING_LOGPROBS?.trim() ?? "false";
+  if (probe !== "true" && probe !== "false") {
+    throw new TypeError("CHOOSEKIT_PROBE_MISSING_LOGPROBS must be true or false.");
+  }
   return {
     backend,
     baseURL,
     ...(imageRoot === undefined ? {} : { imageRoot }),
     ...(model === undefined ? {} : { model }),
     mode,
+    probeMissingLogprobs: probe === "true",
   };
 }

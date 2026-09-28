@@ -18,6 +18,7 @@ try {
         baseURL: config.baseURL,
         ...(config.model === undefined ? {} : { model: config.model }),
         mode: config.mode,
+        probeMissingLogprobs: config.probeMissingLogprobs,
       });
       break;
     case "ollama":

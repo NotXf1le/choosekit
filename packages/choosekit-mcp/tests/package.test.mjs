@@ -18,6 +18,7 @@ function llamaEnvironment() {
     "CHOOSEKIT_BASE_URL",
     "CHOOSEKIT_MODEL",
     "CHOOSEKIT_MODE",
+    "CHOOSEKIT_PROBE_MISSING_LOGPROBS",
     "OPENROUTER_API_KEY",
     "OPENROUTER_PROVIDER",
   ]) delete env[key];

@@ -15,6 +15,7 @@ Select and configure the backend when the MCP process starts. `CHOOSEKIT_BACKEND
 | All | `CHOOSEKIT_MODE` | `labels` | `labels` for every backend; `minimal-prefix` is llama.cpp only |
 | All | `CHOOSEKIT_IMAGE_ROOT` | Current working directory | Root directory for files supplied through `imagePaths` |
 | llama.cpp | `CHOOSEKIT_BASE_URL` | Required | Base URL of the llama.cpp server, for example `http://127.0.0.1:8080` |
+| llama.cpp | `CHOOSEKIT_PROBE_MISSING_LOGPROBS` | `false` | Set to `true` to score choices outside the returned top logprobs with additional requests |
 | Ollama | `CHOOSEKIT_BASE_URL` | `http://127.0.0.1:11434` | Base URL of the Ollama server |
 | OpenRouter | `OPENROUTER_API_KEY` | Required | OpenRouter API key |
 | OpenRouter | `OPENROUTER_PROVIDER` | Not set | Pins one provider and disables fallback |
@@ -93,7 +94,7 @@ Relative paths are resolved from `CHOOSEKIT_IMAGE_ROOT`, which defaults to the M
 
 With `labels`, choosekit maps the supplied choice keys to A/B/C labels for scoring, so each description must contain the option's full meaning. With `minimal-prefix`, it scores the shortest token prefixes that distinguish the original keys. When no supplied option may apply, add an explicit choice such as `insufficient_information`.
 
-The result contains the selected key, the complete normalized distribution, raw scores, margin, entropy, token-boundary rollback, and backend usage when available. A score is `null` when the upstream backend did not return a log probability for that choice; its probability in the distribution is `0`. Probabilities represent relative preference among the supplied choices. Estimating correctness requires separate calibration.
+The result contains the selected key, the normalized distribution, raw scores, margin, entropy, token-boundary rollback, and backend usage when available. A score is `null` when the upstream backend did not return a log probability for that choice; its probability in the distribution is `0`. Probabilities represent relative preference among the supplied choices. Estimating correctness requires separate calibration.
 
 ## Requirements
 
