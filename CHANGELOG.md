@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+## 0.7.0 - 2026-09-28
+
+- Reduced llama.cpp scoring requests with batched tokenization and overlapping vision checks.
+- Removed a redundant image-prefix tokenization request.
+- Choices absent from llama.cpp's first `top_logprobs` result now receive zero probability by default. Set `probeMissingLogprobs: true` to score them with additional requests.
+
 ## 0.6.0 - 2026-09-22
 
 - Added image inputs for vision-capable llama.cpp, Ollama, and OpenRouter models.
