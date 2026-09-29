@@ -135,6 +135,32 @@ Supported media types are PNG, JPEG, and WebP. llama.cpp image inputs currently 
 
 The MCP server accepts image file paths through `imagePaths` in `labels` mode. Paths are resolved from the server's working directory by default; set `CHOOSEKIT_IMAGE_ROOT` to use another root. Every image must remain within that root and be a PNG, JPEG, or WebP file. With OpenRouter, the image contents are sent to the remote service.
 
+## Multiple questions
+
+Use `chooseMany()` to ask several independent questions about the same context:
+
+```ts
+import { chooseMany } from "choosekit";
+
+const decisions = await chooseMany(choose, {
+  context: "A payout failed three days in a row. Payroll is due today.",
+  questions: {
+    route: {
+      question: "Which team should handle this?",
+      choices: { billing: "Payments and payouts", technical: "Bugs and API errors" },
+    },
+    urgency: {
+      question: "How urgent is this?",
+      choices: { high: "Needs attention today", low: "Can wait" },
+    },
+  },
+});
+
+console.log(decisions.route.choice, decisions.urgency.choice);
+```
+
+Each question calls `choose()` concurrently and returns its own decision and, when available, token and request counts. Supplied images are sent with each call. If one call fails, the group rejects while calls already in progress continue.
+
 ## Scoring modes
 
 | Mode | Candidate representation | Use when |

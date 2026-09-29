@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Added `chooseMany()` for independent questions with common context and optional images.
+
 ## 0.7.0 - 2026-09-28
 
 - Reduced llama.cpp scoring requests with batched tokenization and overlapping vision checks.
