@@ -1,4 +1,4 @@
-import { createChooser, type Scorer, type Decision, type ImageInput } from "choosekit";
+import { chooseMany, createChooser, type Scorer, type Decision, type ImageInput } from "choosekit";
 import { fromLlamaCpp } from "choosekit/llama-cpp";
 import { fromOllama } from "choosekit/ollama";
 import { fromOpenRouter } from "choosekit/openrouter";
@@ -54,3 +54,25 @@ const cached: number | null | undefined = decision.usage?.cachedTokens;
 void cached;
 // @ts-expect-error No calibrated correctness confidence is claimed.
 decision.confidence;
+
+const decisions = await chooseMany(choose, {
+  context: "A payout failed.",
+  images: [image],
+  questions: {
+    route: { question: "Which team?", choices: { billing: "Payments", technical: "API bugs" } },
+    urgency: { question: "How urgent?", choices: { high: "Today", low: "Can wait" } },
+  },
+});
+const route: "billing" | "technical" = decisions.route.choice;
+const urgency: "high" | "low" = decisions.urgency.choice;
+const routeProbability: number = decisions.route.distribution.billing;
+void route; void urgency; void routeProbability;
+// @ts-expect-error Route choices do not include urgency choices.
+decisions.route.distribution.high;
+// @ts-expect-error Urgency choices do not include route choices.
+const wrongUrgency: "billing" = decisions.urgency.choice;
+void wrongUrgency;
+// @ts-expect-error Each named question requires a question.
+void chooseMany(choose, { context: "", questions: { route: { choices: { a: "A", b: "B" } } } });
+// @ts-expect-error Choice descriptions must be strings.
+void chooseMany(choose, { context: "", questions: { route: { question: "?", choices: { a: 1, b: "B" } } } });

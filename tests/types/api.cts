@@ -1,4 +1,4 @@
-import { createChooser, type Scorer } from "choosekit";
+import { chooseMany, createChooser, type Scorer } from "choosekit";
 import { fromLlamaCpp } from "choosekit/llama-cpp";
 import { fromOllama } from "choosekit/ollama";
 import { fromOpenRouter } from "choosekit/openrouter";
@@ -8,3 +8,9 @@ void choose({ context: "", question: "Next?", choices: { test: "Test", done: "Do
 void fromLlamaCpp({ baseURL: "http://127.0.0.1:8080" });
 void fromOllama({ model: "test-model" });
 void fromOpenRouter({ apiKey: "test-key", model: "test/model" });
+void chooseMany(choose, {
+  context: "", questions: { route: { question: "Next?", choices: { test: "Test", done: "Done" } } },
+}).then((decisions) => {
+  const key: "test" | "done" = decisions.route.choice;
+  void key;
+});

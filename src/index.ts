@@ -1,4 +1,5 @@
 import { createFormattedChooser } from "./internal-chooser.js";
+export { chooseMany } from "./choose-many.js";
 import type { Chooser, ChooserOptions, Scorer } from "./types.js";
 
 export type {
