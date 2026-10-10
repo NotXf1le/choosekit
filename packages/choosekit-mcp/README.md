@@ -1,6 +1,6 @@
 # choosekit-mcp
 
-`choosekit-mcp` exposes [choosekit](https://github.com/NotXf1le/choosekit) as a read-only MCP tool backed by llama.cpp, Ollama, or OpenRouter.
+`choosekit-mcp` exposes [choosekit](https://github.com/NotXf1le/choosekit) through read-only MCP tools backed by llama.cpp, Ollama, or OpenRouter.
 
 The server uses stdio. It returns a decision and probability distribution. Execution of the selected action remains with the MCP client.
 
@@ -60,9 +60,11 @@ codex mcp add choosekit --env CHOOSEKIT_BACKEND=openrouter --env OPENROUTER_API_
 
 On native Windows, launch `npx` through `cmd` in any example above: replace `-- npx -y choosekit-mcp` with `-- cmd /c npx -y choosekit-mcp`.
 
-## Tool
+## Tools
 
-The server exposes one tool named `choose`:
+### choose
+
+Score a question against the supplied choices:
 
 ```json
 {
@@ -76,7 +78,37 @@ The server exposes one tool named `choose`:
 }
 ```
 
-To score images, add `imagePaths` in `labels` mode:
+### chooseMany
+
+Ask independent named questions about the same context:
+
+```json
+{
+  "context": "A payout failed three days in a row. Payroll is due today.",
+  "questions": {
+    "route": {
+      "question": "Which team should handle this?",
+      "choices": {
+        "billing": "Payments, payouts, invoices, and refunds",
+        "technical": "Bugs, outages, integrations, and API errors"
+      }
+    },
+    "urgency": {
+      "question": "How urgent is this?",
+      "choices": {
+        "low": "The request can wait",
+        "high": "The request needs immediate attention"
+      }
+    }
+  }
+}
+```
+
+The result maps each question name to its decision, including separate token counts when available. Choice limits apply to each question.
+
+### Images
+
+To score images, add `imagePaths` in `labels` mode. Both tools accept this field alongside `context`; `chooseMany` shares the images across all questions.
 
 ```json
 {

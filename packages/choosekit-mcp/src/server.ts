@@ -1,5 +1,5 @@
 import { McpServer } from "@modelcontextprotocol/server";
-import { ScoringError, type Chooser, type Decision, type Usage } from "choosekit";
+import { chooseMany, ScoringError, type Chooser, type Decision } from "choosekit";
 import { createRequire } from "node:module";
 import { z } from "zod";
 import { ImageLoadError, type ImageLoader } from "./images.js";
@@ -31,7 +31,7 @@ const decisionSchema = z.object({
   usage: usageSchema.optional(),
 }).strict();
 
-function inputSchema(backend: "llama-cpp" | "ollama" | "openrouter", mode: ChoiceMode,
+function inputSchemas(backend: "llama-cpp" | "ollama" | "openrouter", mode: ChoiceMode,
   imagesEnabled: boolean) {
   const choicesSchema = z.fromJSONSchema({
     type: "object",
@@ -49,17 +49,28 @@ function inputSchema(backend: "llama-cpp" | "ollama" | "openrouter", mode: Choic
       : mode === "labels" ? { maxProperties: 26 } : {}),
   }) as z.ZodType<Record<string, string>>;
 
-  return z.object({
-    context: z.string().describe("The context to use when making the decision."),
-    question: z.string()
-      .refine((question) => question.trim().length > 0, "The question must not be empty."),
+  const questionSchema = z.object({
+    question: z.string().regex(/\S/, "The question must not be empty."),
     choices: choicesSchema,
+  }).strict();
+  const sharedFields = {
+    context: z.string().describe("The context to use when making the decision."),
     ...(mode === "labels" && imagesEnabled ? {
       imagePaths: z.array(z.string().min(1)).min(1)
         .describe("Image file paths inside the configured image root, in display order.")
         .optional(),
     } : {}),
-  }).strict();
+  };
+  const questionsSchema = z.fromJSONSchema({
+    type: "object",
+    propertyNames: { type: "string", pattern: "^(?!__proto__$).+$" },
+    minProperties: 1,
+    additionalProperties: z.toJSONSchema(questionSchema),
+  }) as z.ZodType<Record<string, z.infer<typeof questionSchema>>>;
+  return {
+    choose: z.object({ ...sharedFields, ...questionSchema.shape }).strict(),
+    chooseMany: z.object({ ...sharedFields, questions: questionsSchema }).strict(),
+  };
 }
 
 function toolDescription(mode: ChoiceMode): string {
@@ -100,6 +111,18 @@ Readonly<Record<string, number | null>> {
     [key, score === -Infinity ? null : score]));
 }
 
+function wireDecision(decision: Decision<string>) {
+  return {
+    choice: decision.choice,
+    distribution: decision.distribution,
+    scores: wireScores(decision.scores),
+    margin: decision.margin,
+    entropy: decision.entropy,
+    boundaryTokens: decision.boundaryTokens,
+    ...(decision.usage === undefined ? {} : { usage: decision.usage }),
+  };
+}
+
 export function buildServer(chooser: Chooser, options: ServerOptions = {}): McpServer {
   if (typeof chooser !== "function") throw new TypeError("chooser must be a function.");
   const backend = options.backend ?? "llama-cpp";
@@ -112,11 +135,12 @@ export function buildServer(chooser: Chooser, options: ServerOptions = {}): McpS
   }
 
   const server = new McpServer({ name: "choosekit-mcp", version: packageVersion });
+  const schemas = inputSchemas(backend, mode, options.imageLoader !== undefined);
   server.registerTool(
     "choose",
     {
       description: toolDescription(mode),
-      inputSchema: inputSchema(backend, mode, options.imageLoader !== undefined),
+      inputSchema: schemas.choose,
       outputSchema: decisionSchema,
       annotations: {
         readOnlyHint: true,
@@ -135,23 +159,40 @@ export function buildServer(chooser: Chooser, options: ServerOptions = {}): McpS
           ...(images === undefined ? {} : { images }),
           signal: ctx.mcpReq.signal,
         }) as Decision<string>;
-        const structuredContent: {
-          choice: string;
-          distribution: Readonly<Record<string, number>>;
-          scores: Readonly<Record<string, number | null>>;
-          margin: number;
-          entropy: number;
-          boundaryTokens: number;
-          usage?: Usage;
-        } = {
-          choice: decision.choice,
-          distribution: decision.distribution,
-          scores: wireScores(decision.scores),
-          margin: decision.margin,
-          entropy: decision.entropy,
-          boundaryTokens: decision.boundaryTokens,
-          ...(decision.usage === undefined ? {} : { usage: decision.usage }),
+        const structuredContent = wireDecision(decision);
+        return {
+          content: [{ type: "text", text: JSON.stringify(structuredContent) }],
+          structuredContent,
         };
+      } catch (error) {
+        return errorResult(error, ctx.mcpReq.signal);
+      }
+    },
+  );
+  server.registerTool(
+    "chooseMany",
+    {
+      description: "Answer independent named questions about the same context. Each question is scored separately. " + toolDescription(mode),
+      inputSchema: schemas.chooseMany,
+      outputSchema: z.record(z.string(), decisionSchema),
+      annotations: {
+        readOnlyHint: true,
+        openWorldHint: backend === "openrouter",
+      },
+    },
+    async ({ context, questions, imagePaths }, ctx) => {
+      try {
+        const images = imagePaths === undefined
+          ? undefined
+          : await options.imageLoader!(imagePaths as readonly string[], ctx.mcpReq.signal);
+        const decisions = await chooseMany(chooser, {
+          context,
+          questions,
+          ...(images === undefined ? {} : { images }),
+          signal: ctx.mcpReq.signal,
+        });
+        const structuredContent = Object.fromEntries(Object.entries(decisions)
+          .map(([name, decision]) => [name, wireDecision(decision)]));
         return {
           content: [{ type: "text", text: JSON.stringify(structuredContent) }],
           structuredContent,

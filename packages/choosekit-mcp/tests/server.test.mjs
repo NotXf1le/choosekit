@@ -86,6 +86,110 @@ async function callChoose(connection, arguments_) {
   return connection.rpc("tools/call", { name: "choose", arguments: arguments_ });
 }
 
+const manyRequest = {
+  context: request.context,
+  questions: {
+    route: { question: request.question, choices: request.choices },
+    constructor: { question: "How urgent is this?", choices: { low: "Can wait", high: "Needs immediate attention" } },
+  },
+};
+
+test("chooseMany starts independent questions together and loads shared images once", async (t) => {
+  const calls = [];
+  const images = [{ mediaType: "image/png", base64: "aW1hZ2U=" }];
+  let loads = 0;
+  let release;
+  const gate = new Promise((resolve) => { release = resolve; });
+  const chooser = async (input) => {
+    calls.push(input);
+    if (calls.length === 2) release();
+    await gate;
+    const keys = Object.keys(input.choices);
+    return {
+      choice: keys[0],
+      distribution: Object.fromEntries(keys.map((key, i) => [key, i === 0 ? 1 : 0])),
+      scores: Object.fromEntries(keys.map((key, i) => [key, i === 0 ? -0.1 : -Infinity])),
+      margin: 1,
+      entropy: 0,
+      boundaryTokens: 0,
+      usage: { promptTokens: input.question.length, cachedTokens: null, completionTokens: 1, requests: 1 },
+    };
+  };
+  const connection = await connect(chooser, {
+    backend: "ollama",
+    imageLoader: async (paths) => {
+      loads++;
+      assert.deepEqual(paths, ["example.png"]);
+      return images;
+    },
+  });
+  t.after(() => connection.close());
+  const response = await connection.rpc("tools/call", {
+    name: "chooseMany", arguments: { ...manyRequest, imagePaths: ["example.png"] },
+  });
+  assert.notEqual(response.result.isError, true);
+  const result = response.result.structuredContent;
+  assert.deepEqual(Object.keys(result), ["route", "constructor"]);
+  assert.equal(result.route.choice, "billing");
+  assert.equal(result.constructor.choice, "low");
+  assert.equal(result.route.scores.technical, null);
+  assert.equal(result.route.usage.promptTokens, request.question.length);
+  assert.equal(result.constructor.usage.promptTokens, manyRequest.questions.constructor.question.length);
+  assert.deepEqual(JSON.parse(response.result.content[0].text), result);
+  assert.equal(loads, 1);
+  for (const call of calls) {
+    assert.equal(call.context, manyRequest.context);
+    assert.equal(call.images, images);
+    assert.equal(call.signal, calls[0].signal);
+  }
+});
+
+test("chooseMany rejects invalid groups before calling the chooser", async (t) => {
+  let calls = 0;
+  const connection = await connect(async () => { calls++; }, { backend: "openrouter" });
+  t.after(() => connection.close());
+  const tooMany = Object.fromEntries(Array.from({ length: 21 }, (_, i) => [`choice${i}`, `Description ${i}`]));
+  for (const arguments_ of [
+    { ...manyRequest, questions: {} },
+    { ...manyRequest, model: "test-model" },
+    { ...manyRequest, questions: { route: { ...manyRequest.questions.route, question: " " } } },
+    { ...manyRequest, questions: { route: { ...manyRequest.questions.route, model: "test-model" } } },
+    { ...manyRequest, questions: { route: { question: request.question, choices: tooMany } } },
+    { ...manyRequest, questions: JSON.parse('{"__proto__":{"question":"Which?","choices":{"a":"First","b":"Second"}}}') },
+  ]) {
+    const response = await connection.rpc("tools/call", { name: "chooseMany", arguments: arguments_ });
+    assert.equal(response.result.isError, true);
+    assert.equal(calls, 0);
+  }
+});
+
+test("chooseMany returns a sanitized group error when a question fails", async (t) => {
+  const connection = await connect(async () => { throw new ScoringError("secret upstream details"); });
+  t.after(() => connection.close());
+  const response = await connection.rpc("tools/call", { name: "chooseMany", arguments: manyRequest });
+  assert.equal(response.result.isError, true);
+  assert.equal(response.result.structuredContent, undefined);
+  assert.equal(response.result.content[0].text, "The model could not score the supplied choices.");
+});
+
+test("chooseMany passes MCP cancellation to every question", async (t) => {
+  const signals = [];
+  let started;
+  const hasStarted = new Promise((resolve) => { started = resolve; });
+  const connection = await connect(({ signal }) => new Promise((resolve, reject) => {
+    signals.push(signal);
+    if (signals.length === 2) started();
+    signal.addEventListener("abort", () => reject(signal.reason), { once: true });
+  }));
+  t.after(() => connection.close());
+  const call = await connection.startRpc("tools/call", { name: "chooseMany", arguments: manyRequest });
+  await hasStarted;
+  await connection.notify("notifications/cancelled", { requestId: call.id, reason: "test" });
+  assert.ok(signals.every((signal) => signal.aborted));
+  connection.discard(call.id);
+  await assert.rejects(call.response, /cancelled by the test client/);
+});
+
 test("exposes a strict, read-only llama.cpp choose tool", async (t) => {
   const connection = await connect(async () => assert.fail("chooser should not run"));
   t.after(() => connection.close());

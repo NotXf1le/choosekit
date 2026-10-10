@@ -179,7 +179,7 @@ test("defaults to llama.cpp and lists tools without contacting it", async (t) =>
 
   const response = await process_.rpc("tools/list");
 
-  assert.deepEqual(response.result.tools.map((tool) => tool.name), ["choose"]);
+  assert.deepEqual(response.result.tools.map((tool) => tool.name), ["choose", "chooseMany"]);
   assert.ok(process_.lines.length >= 2);
   for (const line of process_.lines) assert.doesNotThrow(() => JSON.parse(line));
 });
@@ -262,6 +262,23 @@ test("serves an Ollama image choice through its configured chat endpoint", async
   assert.equal(requests[0].url, "/api/chat");
   assert.equal(requests[0].body.model, "fixture-model");
   assert.deepEqual(requests[0].body.messages[0].images, [image.toString("base64")]);
+  const many = await process_.rpc("tools/call", {
+    name: "chooseMany",
+    arguments: {
+      context: request.context,
+      imagePaths: ["example.png"],
+      questions: {
+        route: { question: request.question, choices: request.choices },
+        urgency: { question: "How urgent is this?", choices: { low: "Can wait", high: "Needs immediate attention" } },
+      },
+    },
+  });
+  assert.equal(many.result.structuredContent.route.choice, "technical");
+  assert.equal(many.result.structuredContent.urgency.choice, "high");
+  assert.equal(requests.length, 3);
+  for (const received of requests.slice(1)) {
+    assert.deepEqual(received.body.messages[0].images, [image.toString("base64")]);
+  }
 });
 
 test("serves a minimal-prefix choice using the configured llama.cpp endpoint", async (t) => {
@@ -326,5 +343,17 @@ test("serves a minimal-prefix choice using the configured llama.cpp endpoint", a
   assert.ok(scoredTokenIds.includes("t".charCodeAt(0) + 1));
   assert.ok(!scoredTokenIds.includes("A".charCodeAt(0) + 1));
   assert.ok(requests.some((request) => request.body.model === "fixture-model"));
+  const many = await process_.rpc("tools/call", {
+    name: "chooseMany",
+    arguments: {
+      context: request.context,
+      questions: {
+        route: { question: request.question, choices: request.choices },
+        followup: { question: "Who should investigate?", choices: request.choices },
+      },
+    },
+  });
+  assert.equal(many.result.structuredContent.route.choice, "billing");
+  assert.equal(many.result.structuredContent.followup.choice, "billing");
   for (const line of process_.lines) assert.doesNotThrow(() => JSON.parse(line));
 });
