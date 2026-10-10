@@ -51,7 +51,7 @@ The project was inspired by [Jev and the System One model interface](https://typ
 
 ## MCP server
 
-[`choosekit-mcp`](packages/choosekit-mcp/README.md) exposes choosekit through llama.cpp, Ollama, or OpenRouter as a read-only stdio tool for Claude Code, Codex, and OpenCode. Select the backend and configure it with environment variables when starting the MCP server.
+[`choosekit-mcp`](packages/choosekit-mcp/README.md) provides read-only `choose` and `chooseMany` MCP tools through llama.cpp, Ollama, or OpenRouter for Claude Code, Codex, and OpenCode. Select the backend and configure it with environment variables when starting the MCP server.
 
 ## llama.cpp
 

@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- Added the MCP `chooseMany` tool for independent named questions with shared context and optional images.
+
 ## 0.8.0 - 2026-10-10
 
 - Added `chooseMany()` for independent questions with common context and optional images.
