@@ -12,7 +12,8 @@ It accepts `text and images` through llama.cpp, Ollama, and OpenRouter.
 ```ts
 const relevance = await choose({
   context: "",
-  question: 'Does this passage answer whether export works offline? Passage: "Export is available on every paid plan."',
+  question: 'Does this passage answer whether export works offline? '
+    + 'Passage: "Export is available on every paid plan."',
   choices: {
     answers: "Directly answers the question",
     partial: "Related, but missing the answer",
