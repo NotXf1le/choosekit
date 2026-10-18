@@ -1,6 +1,7 @@
 # choosekit
 
-`choosekit` scores a finite set of choices and returns a typed decision with a probability distribution. It accepts `text and images` through llama.cpp, Ollama, and OpenRouter.
+`choosekit` scores a finite set of choices and returns a typed decision with a probability distribution. 
+It accepts `text and images` through llama.cpp, Ollama, and OpenRouter.
 
 ## Use cases
 
