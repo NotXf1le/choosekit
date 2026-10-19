@@ -9,6 +9,7 @@ void fromLlamaCpp({ baseURL: "http://127.0.0.1:8080" });
 void fromOllama({ model: "test-model" });
 void fromOpenRouter({ apiKey: "test-key", model: "test/model" });
 void chooseMany(choose, {
+  concurrency: 2,
   context: "", questions: { route: { question: "Next?", choices: { test: "Test", done: "Done" } } },
 }).then((decisions) => {
   const key: "test" | "done" = decisions.route.choice;

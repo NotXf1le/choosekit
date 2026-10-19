@@ -56,6 +56,7 @@ void cached;
 decision.confidence;
 
 const decisions = await chooseMany(choose, {
+  concurrency: 2,
   context: "A payout failed.",
   images: [image],
   questions: {

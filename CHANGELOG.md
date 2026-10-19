@@ -3,6 +3,7 @@
 ## Unreleased
 
 - Added the MCP `chooseMany` tool for independent named questions with shared context and optional images.
+- Added optional `concurrency` to `chooseMany()` without changing its default parallelism. Queued questions keep a snapshot of their inputs and stop on failure or cancellation.
 
 ## 0.8.0 - 2026-10-10
 
