@@ -139,8 +139,35 @@ test("chooseMany starts independent questions together and loads shared images o
   assert.equal(loads, 1);
   for (const call of calls) {
     assert.equal(call.context, manyRequest.context);
-    assert.equal(call.images, images);
+    assert.deepEqual(call.images, images);
     assert.equal(call.signal, calls[0].signal);
+  }
+});
+
+test("chooseMany respects the requested concurrency", async (t) => {
+  for (const concurrency of [1, 2]) {
+    await t.test(`concurrency ${concurrency}`, async (t) => {
+      let active = 0;
+      let peak = 0;
+      let calls = 0;
+      const chooser = createChooser(async () => {
+        calls++;
+        peak = Math.max(peak, ++active);
+        await new Promise(setImmediate);
+        active--;
+        return { logprobs: [-0.1, -2], boundaryTokens: 0 };
+      });
+      const connection = await connect(chooser);
+      t.after(() => connection.close());
+      const questions = { ...manyRequest.questions, extra: manyRequest.questions.route };
+      const response = await connection.rpc("tools/call", {
+        name: "chooseMany", arguments: { ...manyRequest, questions, concurrency },
+      });
+      assert.notEqual(response.result.isError, true);
+      assert.deepEqual(Object.keys(response.result.structuredContent), Object.keys(questions));
+      assert.equal(calls, 3);
+      assert.equal(peak, concurrency);
+    });
   }
 });
 
@@ -152,6 +179,8 @@ test("chooseMany rejects invalid groups before calling the chooser", async (t) =
   for (const arguments_ of [
     { ...manyRequest, questions: {} },
     { ...manyRequest, model: "test-model" },
+    ...[0, -1, 1.5, "2", null, Number.MAX_SAFE_INTEGER + 1]
+      .map((concurrency) => ({ ...manyRequest, concurrency })),
     { ...manyRequest, questions: { route: { ...manyRequest.questions.route, question: " " } } },
     { ...manyRequest, questions: { route: { ...manyRequest.questions.route, model: "test-model" } } },
     { ...manyRequest, questions: { route: { question: request.question, choices: tooMany } } },

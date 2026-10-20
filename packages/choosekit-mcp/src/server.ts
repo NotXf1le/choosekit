@@ -69,7 +69,13 @@ function inputSchemas(backend: "llama-cpp" | "ollama" | "openrouter", mode: Choi
   }) as z.ZodType<Record<string, z.infer<typeof questionSchema>>>;
   return {
     choose: z.object({ ...sharedFields, ...questionSchema.shape }).strict(),
-    chooseMany: z.object({ ...sharedFields, questions: questionsSchema }).strict(),
+    chooseMany: z.object({
+      ...sharedFields,
+      questions: questionsSchema,
+      concurrency: z.number().int().positive()
+        .describe("Maximum simultaneous questions. Omit to run all questions concurrently.")
+        .optional(),
+    }).strict(),
   };
 }
 
@@ -180,7 +186,7 @@ export function buildServer(chooser: Chooser, options: ServerOptions = {}): McpS
         openWorldHint: backend === "openrouter",
       },
     },
-    async ({ context, questions, imagePaths }, ctx) => {
+    async ({ context, questions, imagePaths, concurrency }, ctx) => {
       try {
         const images = imagePaths === undefined
           ? undefined
@@ -188,6 +194,7 @@ export function buildServer(chooser: Chooser, options: ServerOptions = {}): McpS
         const decisions = await chooseMany(chooser, {
           context,
           questions,
+          ...(concurrency === undefined ? {} : { concurrency }),
           ...(images === undefined ? {} : { images }),
           signal: ctx.mcpReq.signal,
         });
