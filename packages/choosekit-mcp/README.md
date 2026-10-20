@@ -106,6 +106,8 @@ Ask independent named questions about the same context:
 
 The result maps each question name to its decision, including separate token counts when available. Choice limits apply to each question.
 
+Optional `concurrency` limits simultaneous questions. Omit it to run all questions concurrently.
+
 ### Images
 
 To score images, add `imagePaths` in `labels` mode. Both tools accept this field alongside `context`; `chooseMany` shares the images across all questions.
