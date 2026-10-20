@@ -166,7 +166,7 @@ const decisions = await chooseMany(choose, {
 console.log(decisions.route.choice, decisions.urgency.choice);
 ```
 
-Each question calls `choose()` concurrently and returns its own decision and, when available, token and request counts. Supplied images are sent with each call. If one call fails, the group rejects while calls already in progress continue.
+Each question calls `choose()` concurrently by default. Set `concurrency` to limit parallel calls. Each question returns its own decision, with usage when available. Images are sent with each call. On failure, queued questions stop. Running calls continue.
 
 ## Scoring modes
 
