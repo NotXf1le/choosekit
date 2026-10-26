@@ -1,6 +1,6 @@
 {
   "name": "choosekit-mcp",
-  "version": "0.6.0",
+  "version": "0.6.1",
   "description": "Use choosekit as an MCP server.",
   "license": "Apache-2.0",
   "author": {
@@ -37,7 +37,7 @@
   },
   "dependencies": {
     "@modelcontextprotocol/server": "2.0.0",
-    "choosekit": "^0.9.0",
+    "choosekit": "^0.9.1",
     "zod": "^4.6.4"
   },
   "devDependencies": {

@@ -91,9 +91,13 @@ function errorResult(error: unknown, signal: AbortSignal) {
     throw error;
   }
   if (error instanceof ScoringError) {
+    const status = error.httpStatus;
+    const text = typeof status === "number" && Number.isInteger(status) && status >= 100 && status <= 599
+      ? `The scoring backend returned HTTP ${status}.`
+      : "The model could not score the supplied choices.";
     return {
       isError: true as const,
-      content: [{ type: "text" as const, text: "The model could not score the supplied choices." }],
+      content: [{ type: "text" as const, text }],
     };
   }
   if (error instanceof ImageLoadError) {

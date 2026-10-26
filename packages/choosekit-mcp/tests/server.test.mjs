@@ -484,3 +484,46 @@ test("preserves constructor as an ordinary choice key", async (t) => {
   assert.equal(response.result.structuredContent.choice, "constructor");
   assert.deepEqual(receivedChoices, arguments_.choices);
 });
+
+for (const [tool, arguments_] of [["choose", request], ["chooseMany", manyRequest]]) {
+  test(`${tool} reports only validated HTTP metadata and recovers after failure`, async (t) => {
+    const choose = createChooser(() => ({ logprobs: [-0.1, -2], boundaryTokens: 1 }));
+    let failure;
+    const connection = await connect(async (input) => {
+      if (failure) throw failure;
+      return choose(input);
+    });
+    t.after(() => connection.close());
+
+    const cases = [
+      ...[100, 200, 302, 401, 403, 429, 503, 599].map((httpStatus) => [
+        new ScoringError("secret upstream details", {
+          httpStatus, cause: new Error("secret cause"),
+        }),
+        `The scoring backend returned HTTP ${httpStatus}.`,
+      ]),
+      ...[undefined, null, "401", 99, 600, 401.5, NaN, Infinity, -Infinity,
+        { toString() { throw new Error("must not coerce"); } }].map((httpStatus) => [
+        new ScoringError("secret upstream details", { httpStatus }),
+        "The model could not score the supplied choices.",
+      ]),
+      [Object.assign(new Error("secret implementation detail"), { httpStatus: 401 }),
+        "The choice request failed unexpectedly."],
+    ];
+
+    for (const [error, text] of cases) {
+      failure = error;
+      const response = await connection.rpc("tools/call", { name: tool, arguments: arguments_ });
+      assert.equal(response.error, undefined);
+      assert.equal(response.result.isError, true);
+      assert.deepEqual(response.result.content, [{ type: "text", text }]);
+      assert.equal(response.result.structuredContent, undefined);
+      assert.doesNotMatch(JSON.stringify(response), /secret/);
+    }
+
+    failure = undefined;
+    const response = await connection.rpc("tools/call", { name: tool, arguments: arguments_ });
+    assert.equal(response.error, undefined);
+    assert.notEqual(response.result.isError, true);
+  });
+}
