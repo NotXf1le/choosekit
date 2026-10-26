@@ -1,4 +1,4 @@
-import { chooseMany, createChooser, type Scorer } from "choosekit";
+import { chooseMany, createChooser, ScoringError, type Scorer } from "choosekit";
 import { fromLlamaCpp } from "choosekit/llama-cpp";
 import { fromOllama } from "choosekit/ollama";
 import { fromOpenRouter } from "choosekit/openrouter";
@@ -15,3 +15,13 @@ void chooseMany(choose, {
   const key: "test" | "done" = decisions.route.choice;
   void key;
 });
+
+const httpError = new ScoringError(undefined, { httpStatus: 401, cause: new Error("upstream") });
+const httpStatus: number | undefined = httpError.httpStatus;
+void httpStatus;
+void new ScoringError();
+void new ScoringError("legacy", { cause: new Error("cause") });
+// @ts-expect-error HTTP status must be numeric.
+new ScoringError("HTTP failed", { httpStatus: "401" });
+// @ts-expect-error HTTP metadata is read-only.
+httpError.httpStatus = 429;

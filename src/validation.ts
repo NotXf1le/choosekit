@@ -1,5 +1,11 @@
 export class ScoringError extends Error {
   override readonly name = "ScoringError";
+  readonly httpStatus?: number;
+
+  constructor(message?: string, options?: ErrorOptions & { readonly httpStatus?: number }) {
+    super(message, options);
+    if (options?.httpStatus !== undefined) this.httpStatus = options.httpStatus;
+  }
 }
 
 export function isRecord(value: unknown): value is Record<string, unknown> {
