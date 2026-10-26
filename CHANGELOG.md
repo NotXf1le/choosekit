@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.9.1 - 2026-10-26
+
+- Added optional `ScoringError.httpStatus` for HTTP failures from llama.cpp, Ollama, and OpenRouter.
+
 ## 0.9.0 - 2026-10-20
 
 - Added the MCP `chooseMany` tool for independent named questions with shared context and optional images.
