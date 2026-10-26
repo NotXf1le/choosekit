@@ -357,3 +357,33 @@ test("serves a minimal-prefix choice using the configured llama.cpp endpoint", a
   assert.equal(many.result.structuredContent.followup.choice, "billing");
   for (const line of process_.lines) assert.doesNotThrow(() => JSON.parse(line));
 });
+
+test("CLI preserves adapter HTTP 429 in both tool errors", async (t) => {
+  const preload = `globalThis.fetch = async () => Response.json(
+    { error: "secret upstream details" }, { status: 429 });`;
+  const fixture = `data:text/javascript;base64,${Buffer.from(preload).toString("base64")}`;
+  const process_ = startCli(cliEnvironment({
+    CHOOSEKIT_BACKEND: "openrouter",
+    CHOOSEKIT_BASE_URL: "",
+    CHOOSEKIT_MODEL: "fixture/model",
+    OPENROUTER_API_KEY: "secret-api-key",
+  }), ["--import", fixture]);
+  t.after(() => process_.close());
+  await initialize(process_);
+
+  for (const [name, arguments_] of [
+    ["choose", request],
+    ["chooseMany", {
+      context: request.context,
+      questions: { route: { question: request.question, choices: request.choices } },
+    }],
+  ]) {
+    const response = await process_.rpc("tools/call", { name, arguments: arguments_ });
+    assert.equal(response.error, undefined);
+    assert.equal(response.result.isError, true);
+    assert.deepEqual(response.result.content,
+      [{ type: "text", text: "The scoring backend returned HTTP 429." }]);
+    assert.equal(response.result.structuredContent, undefined);
+    assert.doesNotMatch(JSON.stringify(response), /secret/);
+  }
+});
