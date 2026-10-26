@@ -1,4 +1,4 @@
-import { chooseMany, createChooser, type Scorer, type Decision, type ImageInput } from "choosekit";
+import { chooseMany, createChooser, ScoringError, type Scorer, type Decision, type ImageInput } from "choosekit";
 import { fromLlamaCpp } from "choosekit/llama-cpp";
 import { fromOllama } from "choosekit/ollama";
 import { fromOpenRouter } from "choosekit/openrouter";
@@ -77,3 +77,13 @@ void wrongUrgency;
 void chooseMany(choose, { context: "", questions: { route: { choices: { a: "A", b: "B" } } } });
 // @ts-expect-error Choice descriptions must be strings.
 void chooseMany(choose, { context: "", questions: { route: { question: "?", choices: { a: 1, b: "B" } } } });
+
+const httpError = new ScoringError(undefined, { httpStatus: 401, cause: new Error("upstream") });
+const httpStatus: number | undefined = httpError.httpStatus;
+void httpStatus;
+void new ScoringError();
+void new ScoringError("legacy", { cause: new Error("cause") });
+// @ts-expect-error HTTP status must be numeric.
+new ScoringError("HTTP failed", { httpStatus: "401" });
+// @ts-expect-error HTTP metadata is read-only.
+httpError.httpStatus = 429;

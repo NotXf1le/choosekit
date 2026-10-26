@@ -34,7 +34,9 @@ async function post(fetchImpl: typeof globalThis.fetch, apiKey: string, body: un
   }
   signal?.throwIfAborted();
   if (!response.ok) {
-    throw new ScoringError(`OpenRouter returned HTTP ${response.status} for /chat/completions.`);
+    throw new ScoringError(`OpenRouter returned HTTP ${response.status} for /chat/completions.`, {
+      httpStatus: response.status,
+    });
   }
   try {
     const value: unknown = await response.json();

@@ -109,7 +109,9 @@ async function post(fetchImpl: typeof globalThis.fetch, url: string,
       signal?.throwIfAborted();
       if (isBatchFormatRejection(message)) throw new UnsupportedBatchTokenization();
     }
-    throw new ScoringError(`llama.cpp returned HTTP ${response.status} for ${new URL(url).pathname}.`);
+    throw new ScoringError(`llama.cpp returned HTTP ${response.status} for ${new URL(url).pathname}.`, {
+      httpStatus: response.status,
+    });
   }
   try {
     const value: unknown = await response.json();
@@ -133,7 +135,9 @@ async function get(fetchImpl: typeof globalThis.fetch, url: string,
   }
   signal?.throwIfAborted();
   if (!response.ok) {
-    throw new ScoringError(`llama.cpp returned HTTP ${response.status} for ${new URL(url).pathname}.`);
+    throw new ScoringError(`llama.cpp returned HTTP ${response.status} for ${new URL(url).pathname}.`, {
+      httpStatus: response.status,
+    });
   }
   try {
     const value: unknown = await response.json();

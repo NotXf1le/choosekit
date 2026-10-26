@@ -41,7 +41,9 @@ async function post(fetchImpl: typeof globalThis.fetch, url: string, body: unkno
   }
   signal?.throwIfAborted();
   if (!response.ok) {
-    throw new ScoringError(`Ollama returned HTTP ${response.status} for ${new URL(url).pathname}.`);
+    throw new ScoringError(`Ollama returned HTTP ${response.status} for ${new URL(url).pathname}.`, {
+      httpStatus: response.status,
+    });
   }
   try {
     const value: unknown = await response.json();
