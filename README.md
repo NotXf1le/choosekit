@@ -230,4 +230,8 @@ Model comparisons, methodology, and reproduction commands live in [benchmarks/RE
 - Node.js 20 or newer.
 - The `choosekit` package has no runtime dependencies, model downloads, installation hooks, or bundled inference servers.
 
+## Contributing
+
+Contributions are welcome, including bug reports, examples, documentation, and code. See [CONTRIBUTING.md](CONTRIBUTING.md) for setup, checks, and how to get started.
+
 [Apache-2.0](LICENSE). Copyright 2026 NotXf1le.
